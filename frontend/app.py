@@ -91,7 +91,6 @@ def live_interview():
     except StopIteration:
         flash('No questions available for the interview.', 'error')
         return redirect(url_for('job_details'))
-    question_audio = "audio/question1.mp3"  # Placeholder for the audio file path
     return render_template(
         "live_interview.html",
         job_title=job_title,

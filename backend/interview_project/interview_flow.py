@@ -242,13 +242,15 @@ class Interviewer:
                         Text=personalized_question
                     )
                 )
-                # Write audio to temp file
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_audio_file:
-                    temp_audio_path = temp_audio_file.name
-                    temp_audio_file.write(response["AudioStream"].read())
+                # Save audio to the static/audio/ directory
+                audio_dir = os.path.join(os.getcwd(), "frontend", "static", "audio")
+                os.makedirs(audio_dir, exist_ok=True)
+                audio_filename = os.path.join(audio_dir, f"question.mp3")
+                with open(audio_filename, "wb") as audio_file:
+                    audio_file.write(response["AudioStream"].read())
             except Exception as e:
                 print(f"Error generating audio for question: {e}", file=sys.stderr)
-                temp_audio_path = None
+                audio_filename = None
 
             # Add the question to the asked questions list
             if question not in self.asked_questions:
@@ -299,7 +301,7 @@ class Interviewer:
             if os.path.exists(audio_file):
                 os.remove(audio_file)  # Cleanup
 """
-            return personalized_question, temp_audio_path
+            return personalized_question, f"/static/audio/{os.path.basename(audio_filename)}"
         except Exception as e:
             print(f"Error recording response: {e}", file=sys.stderr)
             return None, None
