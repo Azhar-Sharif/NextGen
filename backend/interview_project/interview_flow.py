@@ -6,6 +6,7 @@ import os
 import tempfile
 import pygame.mixer
 import boto3
+from dotenv import load_dotenv
 from .audio_processing import record_audio_async, save_audio_to_wav_async, transcribe_audio_with_whisper_async
 from .question_generation import generate_question, should_ask_more_questions, initialize_llm, memory
 from .feedback_generation import generate_overall_feedback, save_feedback_to_pdf
@@ -20,47 +21,60 @@ class Interviewer:
     def __init__(self, config_file=None, debug=False):
         """
         Initialize the Interviewer.
-        
+
         Args:
             config_file (str, optional): Path to a custom config file
             debug (bool): Whether to enable debug logging
         """
         self.debug = debug
-        
+
         # Load configuration
         config = configparser.ConfigParser()
         if config_file and os.path.exists(config_file):
             config.read(config_file)
         else:
             config.read('backend/interview_project/config.ini')
-            
+
+        # Load environment variables from .env file as a fallback
+        load_dotenv()
+
         # Configure AWS services
-        self.aws_region_name = config['aws']['region_name']
-        self.openai_api_key = config['openai']['api_key']
-        self.polly_voice_id = config.get('aws', 'polly_voice_id', fallback="Joanna")
+        self.aws_region_name = config.get('aws', 'region_name', fallback=os.getenv('AWS_REGION_NAME', 'us-east-1'))
+        self.polly_voice_id = config.get('aws', 'polly_voice_id', fallback=os.getenv('AWS_POLLY_VOICE_ID', 'Joanna'))
+        self.openai_api_key = config.get('openai', 'api_key', fallback=os.getenv('OPENAI_API_KEY'))
+
+        # Initialize AWS Polly client
         self.polly_client = self.initialize_polly_client()
-        
+
         # Initialize components
         self.response_analyzer = ResponseAnalyzer()
-        self.openai_client = AsyncOpenAI(api_key=self.openai_api_key)
-        #pygame.mixer.init()  # Initialize pygame mixer once
-        
+        self.openai_client = self.initialize_llm(self.openai_api_key)
+
         # Interview state
         self.user_experience = ""
         self.user_name = "User"
         self.asked_questions = []
         self.current_difficulty = "basic"
-
         self.answers = []
         self.job_description = ""
         self.rag_engine = None  # Will be initialized later
-        
+
         if self.debug:
             print("Interviewer initialized with debug mode enabled.", file=sys.stderr)
         print("Interviewer initialized.")
+
     def initialize_polly_client(self):
         """Initializes the Amazon Polly client."""
-        return boto3.Session(region_name=self.aws_region_name).client("polly")
+        try:
+            return boto3.Session(region_name=self.aws_region_name).client("polly")
+        except Exception as e:
+            print(f"Error initializing Polly client: {e}", file=sys.stderr)
+            return None
+
+    @staticmethod
+    def initialize_llm(api_key, model_name="gpt-3.5-turbo"):
+        """Initializes the GPT model using the provided API key and model name."""
+        return ChatOpenAI(temperature=0.7, openai_api_key=api_key, model=model_name)
 
     async def speak_text_with_polly(self, text):
         """Converts text to speech using Amazon Polly and plays it with pygame."""
@@ -128,28 +142,40 @@ class Interviewer:
             return False
 
     async def conduct_interview(self):
-        """Conducts the main interview loop asynchronously."""
-        await self.conduct_fixed_questioning("ice-breaking", num_questions=2)
-        
-        # Initialize with a tracking variable for the difficulty level
+        """Conducts the main interview loop asynchronously, yielding one question at a time."""
+        # Ice-breaking questions
+        async for question in self.conduct_fixed_questioning("ice-breaking", num_questions=2):
+            question_text, question_audio = await self.ask_question(question)
+            yield {"text": question_text, "audio": question_audio}
+
+        # Initialize difficulty level
         self.current_difficulty = "basic"
-        
-        # Get the candidate's experience level from their introduction
-        #experience_level = await self.determine_experience_level(self.user_experience)
+
+        # Adjust difficulty based on user experience
         if self.user_experience == "senior":
             self.current_difficulty = "intermediate"
-        
-        # Only print this once, not visible to the user
-        await self.conduct_adaptive_questioning("technical", min_questions=5, max_questions=10)
-        
-        await self.conduct_fixed_questioning("behavioral", num_questions=2)
-        await self.conduct_fixed_questioning("problem-solving", num_questions=2)
-        await self.conduct_fixed_questioning("career-goal", num_questions=1)
-        #await self.generate_and_save_feedback()
 
+        """# Adaptive technical questions
+        async for question in self.conduct_adaptive_questioning("technical", min_questions=5, max_questions=10):
+            yield question
+
+        # Behavioral questions
+        async for question in self.conduct_fixed_questioning("behavioral", num_questions=2):
+            yield question
+
+        # Problem-solving questions
+        async for question in self.conduct_fixed_questioning("problem-solving", num_questions=2):
+            yield question
+
+        # Career-goal questions
+        async for question in self.conduct_fixed_questioning("career-goal", num_questions=1):
+            yield question
+
+        # Closing statement
         closing_statement = f"Thank you, {self.user_name}, for completing the interview. Your feedback has been saved to a PDF. Best of luck!"
         print(f"AI: {closing_statement}")  # Print once before speaking
         await self.speak_text_with_polly(closing_statement)
+        yield closing_statement"""
 
     async def conduct_fixed_questioning(self, question_type, num_questions):
         """Asks a fixed number of questions of a specific type asynchronously."""
@@ -178,7 +204,105 @@ class Interviewer:
                     print(f"Added topics for {question_type}: {extracted_topics}", file=sys.stderr)
             else:
                 #print(f"Failed to get answer for {question_type} question {i+1}.", file=sys.stderr)
-                return f"Failed to get answer for {question_type} question {i+1}."
+                #return f"Failed to get answer for {question_type} question {i+1}."
+                break
+            yield question
+    async def ask_question(self, question):
+        """Asks a question and records the response asynchronously, returning the question text and audio."""
+        try:
+            # Clean the question from any internal instructions that might be included
+            cleaned_question = self.clean_question_for_speech(question)
+            
+            if self.user_name != "User":
+                first_question_mark_index = cleaned_question.find("?")
+                if first_question_mark_index != -1:
+                    personalized_question = (
+                        cleaned_question[:first_question_mark_index]
+                        + f", {self.user_name}"
+                        + cleaned_question[first_question_mark_index:]
+                    )
+                else:
+                    personalized_question = cleaned_question + f", {self.user_name}"
+            else:
+                personalized_question = cleaned_question
+
+            # Print only once before speaking
+            print(f"AI: {personalized_question}")
+
+
+            # Generate audio for the question
+            loop = asyncio.get_event_loop()
+            temp_audio_path = None
+            try:
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: self.polly_client.synthesize_speech(
+                        VoiceId=self.polly_voice_id,
+                        OutputFormat="mp3",
+                        Text=personalized_question
+                    )
+                )
+                # Write audio to temp file
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_audio_file:
+                    temp_audio_path = temp_audio_file.name
+                    temp_audio_file.write(response["AudioStream"].read())
+            except Exception as e:
+                print(f"Error generating audio for question: {e}", file=sys.stderr)
+                temp_audio_path = None
+
+            # Add the question to the asked questions list
+            if question not in self.asked_questions:
+                self.asked_questions.append(question)
+            """
+            print("Recording your answer...")
+            raw_audio = await record_audio_async()
+            if raw_audio is None:
+                print("No response recorded. Let's continue with the next question.")
+                return False
+
+            audio_file = await save_audio_to_wav_async(raw_audio)
+            user_response = await transcribe_audio_with_whisper_async(audio_file, self.openai_api_key)
+            if not user_response:
+                print("Could not understand your response. Let's continue with the next question.")
+                return False
+
+            # Use RAG for technical answer evaluation if available
+            question_is_technical = any(term in question.lower() for term in 
+                                       ["algorithm", "model", "data", "statistic", "machine learning", 
+                                        "code", "program", "neural", "regression", "classification"])
+            
+            if self.rag_engine and question_is_technical:
+                # Evaluate the answer using RAG
+                evaluation = await self.rag_engine.evaluate_technical_answer(
+                    question=question, 
+                    answer=user_response,
+                    job_description=self.job_description,
+                    openai_client=self.openai_client
+                )
+                
+                feedback = evaluation.get("feedback", "Thank you for your response.")
+                print(f"RAG evaluation score: {evaluation.get('score', 'N/A')}", file=sys.stderr)
+            else:
+                # Use standard response analyzer
+                feedback = await self.response_analyzer.analyze_response(
+                    user_response, question, self.openai_api_key
+                )
+
+            print(f"\nUser Response: {user_response}")
+            print(f"Feedback: {feedback}")
+
+            self.answers.append(user_response)
+            memory.chat_memory.add_ai_message(question)
+            memory.chat_memory.add_user_message(user_response)
+            add_analysis_to_history(memory, feedback)
+
+            if os.path.exists(audio_file):
+                os.remove(audio_file)  # Cleanup
+"""
+            return personalized_question, temp_audio_path
+        except Exception as e:
+            print(f"Error recording response: {e}", file=sys.stderr)
+            return None, None
 
     async def conduct_adaptive_questioning(self, question_type, min_questions=0, max_questions=10):
         """Conducts questioning with adaptive difficulty levels based on candidate responses."""
@@ -312,82 +436,7 @@ class Interviewer:
                 print(f"Error in questioning: {e}", file=sys.stderr)
                 break
 
-    async def ask_question(self, question):
-        """Asks a question and records the response asynchronously."""
-        try:
-            # Clean the question from any internal instructions that might be included
-            cleaned_question = self.clean_question_for_speech(question)
-            
-            if self.user_name != "User":
-                first_question_mark_index = cleaned_question.find("?")
-                if first_question_mark_index != -1:
-                    personalized_question = (
-                        cleaned_question[:first_question_mark_index]
-                        + f", {self.user_name}"
-                        + cleaned_question[first_question_mark_index:]
-                    )
-                else:
-                    personalized_question = cleaned_question + f", {self.user_name}"
-            else:
-                personalized_question = cleaned_question
-
-            # Print only once before speaking
-            print(f"AI: {personalized_question}")
-            await self.speak_text_with_polly(personalized_question)
-
-            if question not in self.asked_questions:
-                self.asked_questions.append(question)
-
-            print("Recording your answer...")
-            raw_audio = await record_audio_async()
-            if raw_audio is None:
-                print("No response recorded. Let's continue with the next question.")
-                return False
-
-            audio_file = await save_audio_to_wav_async(raw_audio)
-            user_response = await transcribe_audio_with_whisper_async(audio_file, self.openai_api_key)
-            if not user_response:
-                print("Could not understand your response. Let's continue with the next question.")
-                return False
-
-            # Use RAG for technical answer evaluation if available
-            question_is_technical = any(term in question.lower() for term in 
-                                       ["algorithm", "model", "data", "statistic", "machine learning", 
-                                        "code", "program", "neural", "regression", "classification"])
-            
-            if self.rag_engine and question_is_technical:
-                # Evaluate the answer using RAG
-                evaluation = await self.rag_engine.evaluate_technical_answer(
-                    question=question, 
-                    answer=user_response,
-                    job_description=self.job_description,
-                    openai_client=self.openai_client
-                )
-                
-                feedback = evaluation.get("feedback", "Thank you for your response.")
-                print(f"RAG evaluation score: {evaluation.get('score', 'N/A')}", file=sys.stderr)
-            else:
-                # Use standard response analyzer
-                feedback = await self.response_analyzer.analyze_response(
-                    user_response, question, self.openai_api_key
-                )
-
-            print(f"\nUser Response: {user_response}")
-            print(f"Feedback: {feedback}")
-
-            self.answers.append(user_response)
-            memory.chat_memory.add_ai_message(question)
-            memory.chat_memory.add_user_message(user_response)
-            add_analysis_to_history(memory, feedback)
-
-            if os.path.exists(audio_file):
-                os.remove(audio_file)  # Cleanup
-
-            return True
-        except Exception as e:
-            print(f"Error recording response: {e}", file=sys.stderr)
-            return False
-
+    
     def clean_question_for_speech(self, question):
         """Cleans the question to remove any model instructions or non-user-facing content."""
         # Remove common instruction patterns
@@ -600,8 +649,8 @@ class Interviewer:
             
             # Initialize RAG engine after getting job description and user experience
         await self.initialize_rag_engine()
-        print(self.job_description,self.user_experience)
-        return (self.job_description,self.user_experience)
+        print(self,self.job_description,self.user_experience)
+        return (self, self.job_description,self.user_experience)
         """await self.conduct_interview()
         except Exception as e:
     
@@ -618,7 +667,3 @@ class Interviewer:
             return False
         
         return True"""
-@staticmethod
-def initialize_llm(api_key, model_name="gpt-3.5-turbo"):
-    """Initializes the GPT-4 model using the provided API key and model name."""
-    return ChatOpenAI(temperature=0.7, openai_api_key=api_key, model=model_name)

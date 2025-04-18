@@ -6,8 +6,10 @@ from datetime import datetime
 import asyncio
 # Add the parent directory to sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from backend.interview_project.async_file import run_async
 from backend.main import main as start_interview
 from backend.interview_project.interview_flow import *
+from backend.interview_project.async_file import run_async
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key'
 
@@ -39,7 +41,6 @@ mock_questions = [
     "Where do you see yourself in 5 years?"
 ]
 
-interviewer_instance = None
 # Login required decorator
 def login_required(f):
     @wraps(f)
@@ -78,11 +79,26 @@ def live_interview():
         flash('Missing job details.', 'error')
         return redirect(url_for('job_details'))
     #global interviewer_instance
-    interview_instance,job_title,experience_text = asyncio.run(start_interview(job_title=job_title, experience_text=experience_text))    # Get the current question index from the session
-    interview_instance
-    question = 1 #main_return
-    return render_template("live_interview.html", job_title=job_title, experience_text=experience_text, question=question)
-
+    interview_instance,job_title,experience_text = run_async(start_interview(job_title=job_title, experience_text=experience_text))
+    interview_instance = interview_instance
+    print(f"{interview_instance} in app.py")
+    # Fetch the first question from the interview process
+    try:
+        question_data = asyncio.run(interview_instance.conduct_interview().__anext__())
+        first_question = question_data["text"]
+        question_audio = question_data["audio"]
+        print(f"first_question: {first_question} question_audio: {question_audio}")
+    except StopIteration:
+        flash('No questions available for the interview.', 'error')
+        return redirect(url_for('job_details'))
+    question_audio = "audio/question1.mp3"  # Placeholder for the audio file path
+    return render_template(
+        "live_interview.html",
+        job_title=job_title,
+        experience_text=experience_text,
+        first_question=first_question,
+        question_audio=question_audio,
+    )
 @app.route('/job-details', methods=['GET', 'POST'])
 @login_required
 def job_details():

@@ -24,9 +24,9 @@ async def main(job_title, experience_text, config_file=None, debug=False):
     load_dotenv()
     interviewer = Interviewer(config_file=config_file, debug=debug)
     # Pass job_title and experience_text to run_interview
-    job_title,experience_text = await interviewer.run_interview(job_title, experience_text)
-    print(f"Job Title: {job_title} Experience Text: {experience_text}")
-    return (interviewer,job_title, experience_text)
+    interview_instance,job_title,experience_text = await interviewer.run_interview(job_title, experience_text)
+    print(f"Job Title: {job_title} Experience Text: {experience_text} interview_instanc:{interview_instance}")
+    return (interview_instance,job_title, experience_text)
     """if 1:
             print("Interview completed successfully.")
             return 0
