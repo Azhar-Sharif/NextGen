@@ -1,0 +1,52 @@
+[
+    {
+        "id": 1,
+        "question": "Tell me about yourself.",
+        "time_limit": "2 minutes",
+        "tips": [
+            "Maintain good eye contact.",
+            "Speak clearly and confidently.",
+            "Structure your answer with past, present, and future."
+        ]
+    },
+    {
+        "id": 2,
+        "question": "What are your strengths and weaknesses?",
+        "time_limit": "2 minutes",
+        "tips": [
+            "Be honest but strategic.",
+            "Focus on strengths relevant to the job.",
+            "For weaknesses, mention how you're working to improve."
+        ]
+    },
+    {
+        "id": 3,
+        "question": "Describe a challenging project you worked on.",
+        "time_limit": "3 minutes",
+        "tips": [
+            "Explain the problem, your approach, and the outcome.",
+            "Highlight teamwork and problem-solving skills.",
+            "Focus on measurable results."
+        ]
+    },
+    {
+        "id": 4,
+        "question": "Why do you want to work for this company?",
+        "time_limit": "2 minutes",
+        "tips": [
+            "Research the company beforehand.",
+            "Mention specific values or projects you admire.",
+            "Align your goals with the company's mission."
+        ]
+    },
+    {
+        "id": 5,
+        "question": "Where do you see yourself in 5 years?",
+        "time_limit": "2 minutes",
+        "tips": [
+            "Show ambition but stay realistic.",
+            "Align your goals with the company's growth.",
+            "Focus on professional development."
+        ]
+    }
+]

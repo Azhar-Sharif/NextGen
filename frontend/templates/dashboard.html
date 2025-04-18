@@ -1,0 +1,146 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2 class="text-white text-center">Dashboard</h2>
+<p class="text-muted text-center">Welcome back, candidate! View your progress and stats below.</p>
+
+<div class="dashboard-container">
+    <div class="stats">
+        <div class="stat-card">
+            <h3>{{ data.completed_interviews }}</h3>
+            <p>Completed Interviews</p>
+        </div>
+        <div class="stat-card">
+            <h3>{{ data.average_score }}</h3>
+            <p>Average Score</p>
+        </div>
+        <div class="stat-card">
+            <h3>{{ data.upcoming_interviews }}</h3>
+            <p>Upcoming Interviews</p>
+        </div>
+    </div>
+
+    <div class="tips">
+        <h4>Improvement Tips</h4>
+        <ul>
+            {% for tip in data.improvement_tips %}
+            <li>{{ tip }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <div class="analytics-section">
+        <div class="performance-trends">
+            <h3>Performance Trends</h3>
+            <canvas id="trendsChart"></canvas>
+        </div>
+        
+        <div class="skill-breakdown">
+            <h3>Skill Analysis</h3>
+            <div class="skill-metrics">
+                <!-- Dynamic skill metrics -->
+            </div>
+        </div>
+        
+        <div class="interview-history">
+            <h3>Past Interviews</h3>
+            <table class="interview-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Score</th>
+                        <th>Duration</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Dynamic interview history -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<style>
+    .dashboard-container {
+        margin: 20px auto;
+        max-width: 800px;
+        padding: 20px;
+        background: rgba(32, 30, 30, 0.9);
+        border-radius: 10px;
+        box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+    }
+    .stats {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 20px;
+    }
+    .stat-card {
+        background: rgba(0, 0, 0, 0.8);
+        padding: 20px;
+        border-radius: 10px;
+        text-align: center;
+        color: #bbe3e6;
+        flex: 1;
+        margin: 0 10px;
+        box-shadow: 0 0 10px rgba(0, 255, 204, 0.5);
+    }
+    .stat-card h3 {
+        font-size: 2.5rem;
+        color: #00ffcc;
+    }
+    .stat-card p {
+        font-size: 1.2rem;
+        color: #61c2ae;
+    }
+    .tips {
+        background: rgba(0, 0, 0, 0.8);
+        padding: 20px;
+        border-radius: 10px;
+        color: #bbe3e6;
+        box-shadow: 0 0 10px rgba(0, 255, 204, 0.5);
+    }
+    .tips h4 {
+        color: #00ffcc;
+        margin-bottom: 10px;
+    }
+    .tips ul {
+        list-style: none;
+        padding: 0;
+    }
+    .tips ul li {
+        margin-bottom: 10px;
+        font-size: 1rem;
+        color: #fff;
+    }
+    .analytics-section {
+        margin-top: 20px;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 20px;
+        border-radius: 10px;
+        color: #bbe3e6;
+        box-shadow: 0 0 10px rgba(0, 255, 204, 0.5);
+    }
+    .performance-trends, .skill-breakdown, .interview-history {
+        margin-bottom: 20px;
+    }
+    .performance-trends h3, .skill-breakdown h3, .interview-history h3 {
+        color: #00ffcc;
+        margin-bottom: 10px;
+    }
+    .interview-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    .interview-table th, .interview-table td {
+        border: 1px solid #61c2ae;
+        padding: 10px;
+        text-align: center;
+        color: #fff;
+    }
+    .interview-table th {
+        background: #00ffcc;
+        color: #000;
+    }
+</style>
+{% endblock %}

@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <h2 class="text-center mb-4 text-white">Login to NextGen</h2>
+        <form method="POST" action="{{ url_for('login') }}" class="form-container">
+            <div class="mb-3">
+                <label for="email" class="form-label text-light">Email address</label>
+                <input type="email" class="form-control" id="email" name="email" required>
+            </div>
+            <div class="mb-3">
+                <label for="password" class="form-label text-light">Password</label>
+                <input type="password" class="form-control" id="password" name="password" required>
+            </div>
+            <div class="d-grid">
+                <button type="submit" class="btn btn-primary">Login</button>
+            </div>
+        </form>
+        <div class="text-center mt-3">
+            <p class="text-light">Don't have an account? <a href="{{ url_for('signup') }}" class="text-primary">Sign up here</a></p>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="contact-container">
+    <h1 class="text-gradient">Contact Us</h1>
+    
+    <div class="team-grid">
+        <!-- Team Member 1 -->
+        <div class="team-member">
+            <div class="member-avatar">
+                <img src="{{ url_for('static', filename='images/placeholder-avatar.png') }}" alt="Team Member 1">
+            </div>
+            <div class="member-info">
+                <h3>John Doe</h3>
+                <p class="member-role">Lead Developer</p>
+                <div class="contact-details">
+                    <a href="mailto:john@example.com" class="contact-link">
+                        <span class="icon">📧</span>
+                        john@example.com
+                    </a>
+                    <p class="phone-number">
+                        <span class="icon">📱</span>
+                        +1 (234) 567-890
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Team Member 2 -->
+        <div class="team-member">
+            <div class="member-avatar">
+                <img src="{{ url_for('static', filename='images/placeholder-avatar.png') }}" alt="Team Member 2">
+            </div>
+            <div class="member-info">
+                <h3>Jane Smith</h3>
+                <p class="member-role">AI Engineer</p>
+                <div class="contact-details">
+                    <a href="mailto:jane@example.com" class="contact-link">
+                        <span class="icon">📧</span>
+                        jane@example.com
+                    </a>
+                    <p class="phone-number">
+                        <span class="icon">📱</span>
+                        +1 (234) 567-891
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

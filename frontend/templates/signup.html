@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <h2 class="text-center mb-4 text-white">Create a New Account</h2>
+        <form method="POST" action="/signup" class="form-container">
+            <div class="mb-3">
+                <label for="name" class="form-label text-light">Full Name</label>
+                <input type="text" class="form-control" id="name" name="name" placeholder="Your name">
+            </div>
+            <div class="mb-3">
+                <label for="email" class="form-label text-light">Email address</label>
+                <input type="email" class="form-control" id="email" name="email" placeholder="Enter your email">
+            </div>
+            <div class="mb-3">
+                <label for="password1" class="form-label text-light">Password</label>
+                <input type="password" class="form-control" id="password1" name="password1" placeholder="Create password">
+            </div>
+            <div class="mb-3">
+                <label for="password2" class="form-label text-light">Confirm Password</label>
+                <input type="password" class="form-control" id="password2" name="password2" placeholder="Confirm password">
+            </div>
+            <div class="d-grid gap-2">
+                <button type="submit" class="btn btn-success">Sign Up</button>
+            </div>
+        </form>
+        <div class="text-center mt-3">
+            <p class="text-light">Already have an account? <a href="/login" class="text-primary">Login here</a></p>
+        </div>
+    </div>
+</div>
+
+<style>
+    .form-container {
+        background: rgba(0, 0, 0, 0.8);
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+    }
+    .btn-success {
+        background: linear-gradient(90deg, #00ff99, #00cc66);
+        border: none;
+    }
+    .btn-success:hover {
+        background: linear-gradient(90deg, #00cc66, #00ff99);
+    }
+</style>
+{% endblock %}

@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="text-center mt-5">
+    <h1 class="display-3 text-gradient">Welcome to NextGen AI</h1>
+    <p class="lead text-muted">AI-powered mock interviews with real-time feedback.</p>
+    <div class="mt-4">
+        {% if 'user' not in session %}
+            <a href="{{ url_for('signup') }}" class="btn btn-outline-light btn-lg me-3">Get Started</a>
+            <a href="{{ url_for('demo_interview') }}" class="btn btn-primary btn-lg">Try Demo</a>
+        {% else %}
+            <a href="{{ url_for('job_details') }}" class="btn btn-primary btn-lg">Start Interview</a>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-outline-light btn-lg ms-3">View Dashboard</a>
+        {% endif %}
+    </div>
+    <div class="mt-5 text-center">
+      <img src="{{ url_for('static', filename='images/bot.png') }}" 
+           alt="AI Animation" style="width: 300px; border-radius: 20px;">
+  </div>
+  
+<div class="container mt-5">
+    <h2 class="text-center">Why Choose Us?</h2>
+    <div class="row mt-4">
+        <div class="col-md-4">
+            <h3>Real-time Feedback</h3>
+            <p>Get instant feedback on your performance to improve your skills.</p>
+        </div>
+        <div class="col-md-4">
+            <h3>AI-Powered</h3>
+            <p>Utilize advanced AI technology for a realistic interview experience.</p>
+        </div>
+        <div class="col-md-4">
+            <h3>Growth</h3>
+            <p>Track your progress and growth with our detailed analytics.</p>
+        </div>
+    </div>
+    <div class="text-center mt-5">
+        <h2>Contact with us</h2>
+        <p>If you have any questions or need assistance, feel free to reach out!</p>
+        <a href="/contact" class="btn btn-primary btn-lg">Contact Us</a>
+    </div>
+</div>        
+
+{% endblock %}

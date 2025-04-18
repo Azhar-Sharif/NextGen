@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="interview-container">
+
+    <!-- Job Details Section -->
+    <div class="job-details mb-4">
+        <h4>Interview for: <span class="text-primary">{{ job_title }}</span></h4>
+    </div>
+    <!-- Progress Indicator -->
+    <div class="progress-bar">
+        <div class="progress" id="interviewProgress" style="width: 0%"></div>
+        <span class="progress-text">Question 1/12</span>
+    </div>
+
+    <!-- Question Section -->
+<div class="question-section">
+    <div class="current-question">
+        <h2>Current Question:</h2>
+        <p id="questionText" class="question-text">{{ question }}</p>
+    </div>
+</div>
+
+<h1>Live Interview</h1>
+<p>{{ question }}</p>
+<form method="POST" action="{{ url_for('next_question') }}">
+    <button type="submit">Next</button>
+</form>
+        
+        <!-- Recording Controls -->
+        <div class="recording-section">
+            <div class="audio-status">
+                <span class="status-indicator"></span>
+                <span class="status-text">Ready to record</span>
+            </div>
+
+            <div class="audio-visualizer">
+                <canvas id="visualizer"></canvas>
+            </div>
+            
+            <div class="interview-controls">
+                <!-- Recording Controls -->
+                <div class="primary-controls">
+                    <button id="startRecording" class="btn-record">
+                        <span class="record-icon"></span>
+                        Give Answer
+                    </button>
+                    <button id="submitAnswer" class="btn-stop" disabled>
+                        Submit Answer
+                    </button>
+                    <span id="timer" class="recording-timer">00:00</span>
+                </div>
+
+                <!-- Post-Answer Controls -->
+                <div class="secondary-controls" style="display: none;">
+                    <button id="retryAnswer" class="btn-secondary">
+                        <span class="retry-icon">🔄</span>
+                        Try Again
+                    </button>
+                    <button id="endInterview" class="btn-primary" onclick="window.location.href={{ url_for('show_result')}}">
+                        End Interview
+                    </button>
+                </div>
+
+
+        <!-- Response Preview -->
+        <div id="responseSection" class="response-section" style="display: none;">
+            <h3>Your Response:</h3>
+            <p id="transcribedText" class="transcribed-text"></p>
+            
+            <div class="feedback-section">
+                <h3>AI Feedback:</h3>
+                <div id="feedbackText" class="feedback-text"></div>
+            </div>
+
+            <div class="response-actions">
+                <button id="retryAnswer" class="btn-secondary">
+                    <span class="retry-icon">🔄</span>
+                    Try Again
+                </button>
+                <button id="nextQuestion" class="btn-primary">
+                    <span>Next Question</span>
+                    <span class="arrow-icon">→</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Completion Actions -->
+        <div class="completion-actions" style="display: none;">
+            <div class="action-buttons">
+                <button id="downloadReport" class="btn-primary">
+                    <span class="download-icon">📄</span>
+                    Download Interview Report
+                </button>
+                <button id="viewFeedback" class="btn-secondary">
+                    <span class="feedback-icon">📊</span>
+                    View Detailed Feedback
+                </button>
+                <button id="startNewInterview" class="btn-outline">
+                    <span class="retry-icon">🔄</span>
+                    Start New Interview
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/audio-recorder.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const audioRecorder = new AudioRecorder('#visualizer');
+        const startButton = document.getElementById('startRecording');
+        const submitButton = document.getElementById('submitAnswer');
+        const statusIndicator = document.querySelector('.status-indicator');
+        const statusText = document.querySelector('.status-text');
+
+        startButton.addEventListener('click', async () => {
+            try {
+                await audioRecorder.start();
+                startButton.disabled = true;
+                submitButton.disabled = false;
+                statusIndicator.classList.add('recording');
+                statusText.textContent = 'Recording in progress...';
+            } catch (err) {
+                console.error('Error starting recording:', err);
+            }
+        });
+
+        submitAnswer.addEventListener('click', () => {
+            audioRecorder.stop();
+            startButton.disabled = false;
+            stopButton.disabled = true;
+            statusIndicator.classList.remove('recording');
+            statusText.textContent = 'Recording complete';
+            
+            // Show the secondary controls after stopping
+            document.querySelector('.secondary-controls').style.display = 'flex';
+        });
+
+        // Add retry button handler
+        document.getElementById('retryAnswer').addEventListener('click', () => {
+            audioRecorder.reset();
+            document.querySelector('.secondary-controls').style.display = 'flex';
+            startButton.disabled = false;
+            statusText.textContent = 'Ready to record';
+        });
+    });
+    document.addEventListener('DOMContentLoaded', function () {
+        const currentQuestionElement = document.getElementById('questionText');
+        const submitAnswerButton = document.getElementById('submitAnswer');
+        const progressText = document.getElementById('progressText');
+        const progressBar = document.getElementById('interviewProgress');
+        let currentQuestionIndex = 0;
+        const totalQuestions = {{ mock_questions|length }};
+
+        // Fetch the next question dynamically
+        submitAnswerButton.addEventListener('click', function () {
+            if (currentQuestionIndex === 0) {
+                // Skip fetching the first question since it's already displayed
+                currentQuestionIndex++;
+                updateProgress();
+            } else {
+                fetchNextQuestion();
+            }
+        });
+
+        function fetchNextQuestion() {
+            fetch('/api/interview/next-question', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            })
+                .then((response) => response.json())
+                .then((data) => {
+                    if (data.status === 'success') {
+                        currentQuestionElement.textContent = data.question;
+                        currentQuestionIndex++;
+                        updateProgress();
+                    } else if (data.status === 'completed') {
+                        alert(data.message);
+                        window.location.href = '/results'; // Redirect to results page
+                    }
+                })
+                .catch((error) => {
+                    console.error('Error fetching the next question:', error);
+                });
+        }
+
+        function updateProgress() {
+            const progressPercentage = (currentQuestionIndex / totalQuestions) * 100;
+            progressBar.style.width = `${progressPercentage}%`;
+            progressText.textContent = `Question ${currentQuestionIndex}/${totalQuestions}`;
+        }
+    });
+</script>
+{% endblock %}
