@@ -5,9 +5,9 @@ from functools import wraps
 from datetime import datetime
 import asyncio
 # Add the parent directory to sys.path
-#sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-#from backend.main import main as start_interview
-#from backend.interview_project.interview_flow import *
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from backend.main import main as start_interview
+from backend.interview_project.interview_flow import *
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key'
 
@@ -78,8 +78,9 @@ def live_interview():
         flash('Missing job details.', 'error')
         return redirect(url_for('job_details'))
     #global interviewer_instance
-    #interviewer_instance = asyncio.run(start_interview(job_title=job_title, experience_text=experience_text))    # Get the current question index from the session
-    question = 1#main_return
+    interview_instance,job_title,experience_text = asyncio.run(start_interview(job_title=job_title, experience_text=experience_text))    # Get the current question index from the session
+    interview_instance
+    question = 1 #main_return
     return render_template("live_interview.html", job_title=job_title, experience_text=experience_text, question=question)
 
 @app.route('/job-details', methods=['GET', 'POST'])

@@ -21,13 +21,13 @@ async def main(job_title, experience_text, config_file=None, debug=False):
     """
     Main function to run the interview process.
     """
-    try:
-        load_dotenv()
-        interviewer = Interviewer(config_file=config_file, debug=debug)
-        # Pass job_title and experience_text to run_interview
-        #interviewer = await interviewer.run_interview(job_title, experience_text)
-        return interviewer
-        if 1:
+    load_dotenv()
+    interviewer = Interviewer(config_file=config_file, debug=debug)
+    # Pass job_title and experience_text to run_interview
+    job_title,experience_text = await interviewer.run_interview(job_title, experience_text)
+    print(f"Job Title: {job_title} Experience Text: {experience_text}")
+    return (interviewer,job_title, experience_text)
+    """if 1:
             print("Interview completed successfully.")
             return 0
         else:
@@ -41,16 +41,16 @@ async def main(job_title, experience_text, config_file=None, debug=False):
         if debug:
             import traceback
             traceback.print_exc()
-        return 1
+        return 1"""
 
 if __name__ == "__main__":
-    # Set up command line arguments
+    """# Set up command line arguments
     parser = argparse.ArgumentParser(description="Run an AI-powered Interview")
     parser.add_argument("--job_title", required=True, help="Job title for the interview")
     parser.add_argument("--experience_text", required=True, help="Candidate's experience text")
     parser.add_argument("--config", help="Path to custom config file")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
     args = parser.parse_args()
-    
+    """
     # Run the main function and exit with its return code
     sys.exit(asyncio.run(main(job_title=args.job_title, experience_text=args.experience_text, config_file=args.config, debug=args.debug)))

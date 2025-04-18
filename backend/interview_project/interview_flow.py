@@ -1,4 +1,5 @@
 import asyncio
+from langchain_openai import ChatOpenAI
 import aiofiles
 import configparser
 import os
@@ -31,7 +32,7 @@ class Interviewer:
         if config_file and os.path.exists(config_file):
             config.read(config_file)
         else:
-            config.read('backend\config.ini')
+            config.read('backend/interview_project/config.ini')
             
         # Configure AWS services
         self.aws_region_name = config['aws']['region_name']
@@ -42,28 +43,21 @@ class Interviewer:
         # Initialize components
         self.response_analyzer = ResponseAnalyzer()
         self.openai_client = AsyncOpenAI(api_key=self.openai_api_key)
-        pygame.mixer.init()  # Initialize pygame mixer once
+        #pygame.mixer.init()  # Initialize pygame mixer once
         
         # Interview state
         self.user_experience = ""
         self.user_name = "User"
-        self.asked_questions = [
-    "What is the difference between a list and a tuple in Python?",
-    "Explain how a hash table works.",
-    "What is the time complexity of binary search?",
-]
+        self.asked_questions = []
+        self.current_difficulty = "basic"
 
-        self.answers = [
-    "A list is mutable and can be changed, whereas a tuple is immutable and cannot be modified after creation.",
-    "A hash table uses a hash function to compute an index into an array of buckets or slots, from which the desired value can be found.",
-    "The time complexity of binary search is O(log n).",
-]
+        self.answers = []
         self.job_description = ""
         self.rag_engine = None  # Will be initialized later
         
         if self.debug:
             print("Interviewer initialized with debug mode enabled.", file=sys.stderr)
-
+        print("Interviewer initialized.")
     def initialize_polly_client(self):
         """Initializes the Amazon Polly client."""
         return boto3.Session(region_name=self.aws_region_name).client("polly")
@@ -109,7 +103,7 @@ class Interviewer:
         self.job_description = job_title  # Synchronous; consider aioconsole for async input
 
     async def get_user_experience(self,experience_text):
-            self.user_experience = experience_text
+            self.user_experience = await self.determine_experience_level(experience_text)
     
     async def initialize_rag_engine(self):
         """Initialize the RAG engine for technical question generation and answer evaluation."""
@@ -134,7 +128,6 @@ class Interviewer:
             return False
 
     async def conduct_interview(self):
-        return self
         """Conducts the main interview loop asynchronously."""
         await self.conduct_fixed_questioning("ice-breaking", num_questions=2)
         
@@ -142,8 +135,8 @@ class Interviewer:
         self.current_difficulty = "basic"
         
         # Get the candidate's experience level from their introduction
-        experience_level = await self.determine_experience_level(self.user_experience)
-        if experience_level == "senior":
+        #experience_level = await self.determine_experience_level(self.user_experience)
+        if self.user_experience == "senior":
             self.current_difficulty = "intermediate"
         
         # Only print this once, not visible to the user
@@ -173,7 +166,7 @@ class Interviewer:
                 covered_topics=covered_topics,
             )
             if question == "Unable to generate a question.":
-                #print(f"Unable to generate a {question_type} question.", file=sys.stderr)
+                print(f"Unable to generate a {question_type} question.", file=sys.stderr)
                 break
             
             if await self.ask_question(question):
@@ -182,7 +175,7 @@ class Interviewer:
                 if latest_response:
                     extracted_topics = self.extract_response_topics(latest_response)
                     covered_topics.extend(extracted_topics)
-                    #print(f"Added topics for {question_type}: {extracted_topics}", file=sys.stderr)
+                    print(f"Added topics for {question_type}: {extracted_topics}", file=sys.stderr)
             else:
                 #print(f"Failed to get answer for {question_type} question {i+1}.", file=sys.stderr)
                 return f"Failed to get answer for {question_type} question {i+1}."
@@ -582,7 +575,7 @@ class Interviewer:
         Respond with ONLY one of these categories:
         - "junior" (0-2 years of experience)
         - "intermediate" (3-5 years of experience)
-        - "senior" (6+ years of experience)
+        - "senior" (5+ years of experience)
         """
         
         try:
@@ -594,7 +587,7 @@ class Interviewer:
             if experience_level not in ["junior", "intermediate", "senior"]:
                 
                 experience_level = "junior"
-                
+            print(f"Experience level determined: {experience_level}")    
             return experience_level
         except Exception as e:
             return "junior"  # Default to junior in case of error
@@ -607,9 +600,10 @@ class Interviewer:
             
             # Initialize RAG engine after getting job description and user experience
         await self.initialize_rag_engine()
-            
-        await self.conduct_interview()
-        """except Exception as e:
+        print(self.job_description,self.user_experience)
+        return (self.job_description,self.user_experience)
+        """await self.conduct_interview()
+        except Exception as e:
     
             print(f"Error during interview: {e}", file=sys.stderr)
             import traceback
@@ -624,3 +618,7 @@ class Interviewer:
             return False
         
         return True"""
+@staticmethod
+def initialize_llm(api_key, model_name="gpt-3.5-turbo"):
+    """Initializes the GPT-4 model using the provided API key and model name."""
+    return ChatOpenAI(temperature=0.7, openai_api_key=api_key, model=model_name)
