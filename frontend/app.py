@@ -12,6 +12,7 @@ from backend.interview_project.interview_flow import *
 from backend.interview_project.async_file import run_async
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key'
+app.config['INTERVIEW_INSTANCES'] = {}
 
 # Mock data for demo
 mock_interview_data = {
@@ -58,9 +59,61 @@ def index():
 def landing():
     return render_template('landing.html')
 
-@app.route('/live-interview', methods=["POST", "GET"])
+@app.route('/live-interview', methods=['POST', 'GET'])
 @login_required
 def live_interview():
+    if request.method == 'POST':
+        # Retrieve form data
+        job_title = request.form.get('job_title')
+        experience_text = request.form.get('experience_text')
+        interview_instance_id = session.get('interview_instance_id')
+
+        # Retrieve the interview instance from global storage
+        interview_instance = app.config['INTERVIEW_INSTANCES'].get(interview_instance_id)
+
+        if not interview_instance:
+            flash('Interview instance not found. Please restart the interview.', 'error')
+            return redirect(url_for('interview_start_page'))
+
+        # Use these values to conduct the interview
+        print(f"Job Title: {job_title}, Experience: {experience_text}, Instance: {interview_instance}")
+
+        # Initialize the interview process or fetch the first question
+        try:
+            question_data = asyncio.run(interview_instance.conduct_interview().__anext__())
+            first_question = question_data["text"]
+            question_audio = question_data["audio"]
+            print(f"First Question: {first_question}, Audio: {question_audio}")
+        except StopIteration:
+            flash('No questions available for the interview.', 'error')
+            return redirect(url_for('job_details'))
+
+        return render_template(
+            "live_interview.html",
+            first_question=first_question,
+            question_audio=question_audio,
+        )
+    else:
+        flash('Invalid request method.', 'error')
+        return redirect(url_for('interview_start_page'))
+
+@app.route('/job-details', methods=['GET', 'POST'])
+@login_required
+def job_details():
+    if request.method == 'POST':
+        # Get form data
+        job_title = request.form.get('job_title')
+        experience = request.form.get('experience_text')
+        
+        if not job_title or not experience:
+            flash('Please fill in all fields', 'error')
+            return redirect(url_for('job_details'))
+        return redirect(url_for('interview_start_page'))
+    return render_template('job_details.html')
+
+@app.route('/interview_start_page', methods=["POST", "GET"])
+@login_required
+def interview_start_page():
     if 'user' not in session:
         flash('Please login to access interviews', 'warning')
         return redirect(url_for('login'))
@@ -78,40 +131,22 @@ def live_interview():
     if not job_title or not experience_text:
         flash('Missing job details.', 'error')
         return redirect(url_for('job_details'))
-    #global interviewer_instance
-    interview_instance,job_title,experience_text = run_async(start_interview(job_title=job_title, experience_text=experience_text))
-    interview_instance = interview_instance
-    print(f"{interview_instance} in app.py")
-    # Fetch the first question from the interview process
-    try:
-        question_data = asyncio.run(interview_instance.conduct_interview().__anext__())
-        first_question = question_data["text"]
-        question_audio = question_data["audio"]
-        print(f"first_question: {first_question} question_audio: {question_audio}")
-    except StopIteration:
-        flash('No questions available for the interview.', 'error')
-        return redirect(url_for('job_details'))
-    return render_template(
-        "live_interview.html",
-        job_title=job_title,
-        experience_text=experience_text,
-        first_question=first_question,
-        question_audio=question_audio,
-    )
-@app.route('/job-details', methods=['GET', 'POST'])
-@login_required
-def job_details():
-    if request.method == 'POST':
-        # Get form data
-        job_title = request.form.get('job_title')
-        experience = request.form.get('experience_text')
-        
-        if not job_title or not experience:
-            flash('Please fill in all fields', 'error')
-            return redirect(url_for('job_details'))
-        return redirect(url_for('live_interview'))
-    return render_template('job_details.html')
 
+    # Initialize the Interviewer instance
+    interview_instance, job_title, experience = run_async(
+        start_interview(job_title=job_title, experience_text=experience_text)
+    )
+    session['interview_instance_id'] = id(interview_instance)  # Store the instance ID in the session
+    app.config['INTERVIEW_INSTANCES'] = app.config.get('INTERVIEW_INSTANCES', {})
+    app.config['INTERVIEW_INSTANCES'][id(interview_instance)] = interview_instance  # Store the instance globally
+
+    print(f"{interview_instance} in app.py")
+    return render_template(
+        "interview_start_page.html",
+        job_title=job_title,
+        experience_text=experience,
+        interview_instance_id=session['interview_instance_id'],
+    )
 
 @app.route('/results')
 @login_required

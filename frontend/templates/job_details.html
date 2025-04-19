@@ -7,7 +7,7 @@
             <div class="card bg-dark">
                 <div class="card-body">
                     <h2 class="card-title text-center mb-4">Job Details</h2>
-                    <form method="POST" action="{{ url_for('live_interview') }}">
+                    <form method="POST" action="{{ url_for('interview_start_page') }}">
                         <div class="mb-4">
                             <label for="job_title" class="form-label">Select Job Title</label>
                             <select class="form-select" id="job_title" name="job_title" required>
@@ -32,7 +32,7 @@
                         </div>
 
                         <div class="text-center">
-                            <button type="submit" class="btn btn-primary btn-lg">Start Interview</button>
+                            <button type="submit" class="btn btn-primary btn-lg">Instanciate interview</button>
                         </div>
                     </form>
                 </div>

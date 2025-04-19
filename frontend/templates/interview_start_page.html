@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="interview-container">
+
+    <!-- Job Details Section -->
+    <div class="job-details mb-4">
+        <h4>Interview for: <span class="text-primary">{{ job_title }}</span></h4>
+    </div>
+    <div class="job-details mb-4">
+        <h4>Experience: <span class="text-primary">{{ experience_text }}</span></h4>
+    </div>
+
+    <!-- Start Interview Button -->
+    <form method="POST" action="{{ url_for('live_interview') }}">
+        <input type="hidden" name="job_title" value="{{ job_title }}">
+        <input type="hidden" name="experience_text" value="{{ experience_text }}">
+        <button type="submit" class="btn btn-primary">Start Interview</button>
+    </form>
+
+</div>
+{% endblock %}
