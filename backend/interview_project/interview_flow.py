@@ -148,13 +148,6 @@ class Interviewer:
             question_text, question_audio = await self.ask_question(question)
             yield {"text": question_text, "audio": question_audio}
 
-        # Initialize difficulty level
-        self.current_difficulty = "basic"
-
-        # Adjust difficulty based on user experience
-        if self.user_experience == "senior":
-            self.current_difficulty = "intermediate"
-
         """# Adaptive technical questions
         async for question in self.conduct_adaptive_questioning("technical", min_questions=5, max_questions=10):
             yield question
@@ -245,7 +238,8 @@ class Interviewer:
                 # Save audio to the static/audio/ directory
                 audio_dir = os.path.join(os.getcwd(), "frontend", "static", "audio")
                 os.makedirs(audio_dir, exist_ok=True)
-                audio_filename = os.path.join(audio_dir, f"question.mp3")
+                question_number = len(self.asked_questions) + 1
+                audio_filename = os.path.join(audio_dir, f"question_{question_number}.mp3")
                 with open(audio_filename, "wb") as audio_file:
                     audio_file.write(response["AudioStream"].read())
             except Exception as e:
@@ -639,8 +633,15 @@ class Interviewer:
                 
                 experience_level = "junior"
             print(f"Experience level determined: {experience_level}")    
+            # Initialize difficulty level
+            self.current_difficulty = "basic"
+
+        # Adjust difficulty based on user experience
+            if self.user_experience == "senior":
+                self.current_difficulty = "intermediate"
             return experience_level
         except Exception as e:
+            self.current_difficulty = "basic"
             return "junior"  # Default to junior in case of error
 
     async def run_interview(self,job_title, experience_text):

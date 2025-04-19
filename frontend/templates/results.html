@@ -1,16 +1,25 @@
-{% extends 'base.html' %}
-{% block content %}
+{% extends "base.html" %}
 
-<h1>Interview Results</h1>
-    <p>Congratulations! You have completed the interview.</p>
-    <p>Here are your results:</p>
-    <ul>
-        <li>Confidence: {{ mock_results.confidence }}</li>
-        <li>Clarity: {{ mock_results.clarity }}</li>
-        <li>Response Time: {{ mock_results.response_time }}</li>
-        <li>Tip: {{ mock_results.tip }}</li>
-    </ul>
-    <a href="{{ url_for('landing') }}">Back to Home</a>
+{% block content %}
+<div class="results-container">
+    {% if next_question %}
+        <h2>Next Question:</h2>
+        <p>{{ next_question }}</p>
+
+        {% if question_audio %}
+            <audio controls>
+                <source src="{{ question_audio }}" type="audio/mpeg">
+                Your browser does not support the audio element.
+            </audio>
+        {% endif %}
+    {% else %}
+        <h2>Interview Results</h2>
+        <p>Confidence: {{ mock_results.confidence }}</p>
+        <p>Clarity: {{ mock_results.clarity }}</p>
+        <p>Response Time: {{ mock_results.response_time }}</p>
+        <p>Tip: {{ mock_results.tip }}</p>
+    {% endif %}
+</div>
 {% endblock %}
 <style>
     .results-container {

@@ -151,31 +151,27 @@ def interview_start_page():
 @app.route('/results')
 @login_required
 def show_result():
-    """global interviewer_instance
-    
-    if not interviewer_instance:
-        return "Interview not started.", 400
+    # Get the next question and audio from query parameters
+    next_question = request.args.get('question', None)
+    question_audio = request.args.get('audio', None)
 
-    # Example: fill these before evaluation
-    interviewer_instance.asked_questions = [
-        "What is the difference between a list and a tuple in Python?",
-        "Explain how a hash table works.",
-        "What is the time complexity of binary search?",
-    ]
+    # If no question is provided, show mock results
+    if not next_question:
+        mock_results = {
+            'confidence': '75%',
+            'clarity': 'Good',
+            'response_time': '45 seconds',
+            'tip': 'Try to provide more detailed examples in your responses'
+        }
+        return render_template('results.html', mock_results=mock_results)
 
-    interviewer_instance.answers = [
-        "A list is mutable and can be changed, whereas a tuple is immutable and cannot be modified after creation.",
-        "A hash table uses a hash function to compute an index into an array of buckets or slots, from which the desired value can be found.",
-        "The time complexity of binary search is O(log n).",
-    ]"""
-    mock_results = {
-        'confidence': '75%',
-        'clarity': 'Good',
-        'response_time': '45 seconds',
-        'tip': 'Try to provide more detailed examples in your responses'
-    }
-    #result = interviewer_instance.generate_and_save_feedback()
-    return render_template('results.html', mock_results=mock_results)
+    # Render the results page with the next question
+    return render_template(
+        'results.html',
+        next_question=next_question,
+        question_audio=question_audio
+    )
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if 'user' in session:
@@ -267,19 +263,35 @@ def submit_answer():
 
 @app.route('/api/interview/next-question', methods=['POST'])
 @login_required
-def next_question():
-    # Get the current question index from the session
-    current_index = session.get('current_question_index', 0)
-    
-    # Check if there are more questions
-    if current_index < len(mock_questions):
-        question = mock_questions[current_index]
-        session['current_question_index'] = current_index + 1
-        return render_template('live_interview.html', question=question)  # Render the next question
-    else:
-        # If all questions are completed, redirect to results.html
-        flash('Interview completed!', 'success')
-        return redirect(url_for('show_result'))  # Redirect to results.html
+def get_next_question():
+    # Retrieve the interview instance from global storage
+    interview_instance_id = session.get('interview_instance_id')
+    interview_instance = app.config['INTERVIEW_INSTANCES'].get(interview_instance_id)
+
+    if not interview_instance:
+        return jsonify({'status': 'error', 'message': 'Interview instance not found.'}), 404
+
+    try:
+        # Get the next question from the generator
+        question_data = asyncio.run(interview_instance.conduct_interview().__anext__())
+        print(f"Question Data: {question_data}")  # Debugging line
+        next_question = question_data["text"]
+        question_audio = question_data["audio"]
+
+        return jsonify({
+            'status': 'success',
+            'question': next_question,
+            'audio': question_audio
+        })
+    except StopIteration:
+        # No more questions available
+        return jsonify({
+            'status': 'completed',
+            'message': 'The interview is complete. Thank you for participating!'
+        })
+    except Exception as e:
+        print(f"Error fetching next question: {e}", file=sys.stderr)
+        return jsonify({'status': 'error', 'message': 'An error occurred while fetching the next question.'}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
