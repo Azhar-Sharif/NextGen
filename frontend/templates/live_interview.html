@@ -3,20 +3,15 @@
 {% block content %}
 <div class="interview-container">
 
-    <div id="initialData" data-question="{{ first_question }}" data-audio="{{ question_audio }}"></div>
-
-    <!-- Start Button -->
-    <button id="startButton" class="btn btn-primary">Start</button>
-
-    <!-- Question Section (initially hidden) -->
-    <div id="questionSection" style="display: none;">
+    <!-- Question Section -->
+    <div id="questionSection">
         <h2>Current Question:</h2>
         <p id="questionText" class="question-text"></p>
     </div>
 
-    <!-- Audio Player -->
-    <audio id="question-audio" style="display: none;">
-        <source src="{{ question_audio }}" type="audio/mp3">
+    <!-- Hidden Audio Player -->
+    <audio id="question-audio" autoplay>
+        <source src="{{ question_audio }}" type="audio/mpeg">
         Your browser does not support the audio element.
     </audio>
 
@@ -26,30 +21,35 @@
 {% block extra_scripts %}
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        const startButton = document.getElementById('startButton');
-        const questionSection = document.getElementById('questionSection');
-        const questionText = document.getElementById('questionText');
+        const questionTextElement = document.getElementById('questionText');
         const audioElement = document.getElementById('question-audio');
-        const initialData = document.getElementById('initialData');
 
-        // When Start is clicked
-        startButton.addEventListener('click', function () {
-            const question = initialData.getAttribute('data-question');
-            const audio = initialData.getAttribute('data-audio');
+        const questionText = "{{ first_question }}"; // Question text from the backend
+        const typingSpeed = 50; // Speed of typing effect in milliseconds
 
-            // Show question
-            questionText.textContent = question;
-            questionSection.style.display = 'block';
+        // Function to display text with a typing effect
+        function typeText(text, element, delay) {
+            let index = 0;
+            function type() {
+                if (index < text.length) {
+                    element.textContent += text.charAt(index);
+                    index++;
+                    setTimeout(type, delay);
+                }
+            }
+            type();
+        }
 
-            // Hide start button
-            startButton.style.display = 'none';
+        // Play audio and start typing effect in parallel
+        audioElement.play().catch(err => {
+            console.error("Audio playback failed:", err);
+        });
 
-            // Play the audio
-            audioElement.src = audio;
-            audioElement.load();
-            audioElement.play().catch(err => {
-                console.error("Audio playback failed:", err);
-            });
+        // Calculate delay based on audio duration and start typing effect
+        audioElement.addEventListener('loadedmetadata', function () {
+            const audioDuration = audioElement.duration; // Get audio duration in seconds
+            const delay = (audioDuration * 1000) / questionText.length; // Calculate delay per character
+            typeText(questionText, questionTextElement, delay);
         });
     });
 </script>
