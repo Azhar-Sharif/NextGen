@@ -53,7 +53,9 @@ def job_details():
         # Get form data
         job_title = request.form.get('job_title')
         experience = request.form.get('experience_text')
-        
+        # Store job title and experience in session
+        session['job_title'] = job_title
+        session['experience'] = experience
         if not job_title or not experience:
             flash('Please fill in all fields', 'error')
             return redirect(url_for('job_details'))
@@ -87,10 +89,13 @@ def interview_start_page():
     interview_instance, job_title, experience = run_async(
         start_interview(job_title=job_title, experience_text=experience_text)
     )
+    print("interview_instance created from interview_start_page")
     session['interview_instance_id'] = id(interview_instance)  # Store the instance ID in the session
     app.config['INTERVIEW_INSTANCES'] = app.config.get('INTERVIEW_INSTANCES', {})
     app.config['INTERVIEW_INSTANCES'][id(interview_instance)] = interview_instance  # Store the instance globally
-
+    session["job_title"] = job_title
+    session["experience"] = experience
+    session["current_question_index"] = 0  # Reset question index
     # Set the INTERVIEW_INSTANCE key
     app.config['INTERVIEW_INSTANCE'] = interview_instance
 
