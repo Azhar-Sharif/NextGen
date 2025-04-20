@@ -10,6 +10,7 @@ import wave
 import numpy as np
 import subprocess
 import uuid
+import json  # Ensure this is imported at the top of the file
 
 # Add the parent directory to sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -123,28 +124,24 @@ def going_to_conduct_interview():
         if not interview_instance:
             flash('Interview instance not found. Please restart the interview.', 'error')
             return redirect(url_for('interview_start_page'))
-        # Conduct the interview
-        # This is where you would call the method to start the interview
-        # For example:
-        # interview_instance.conduct_interview()
-        # Here, you can use the interview_instance to fetch the first question
-        # Initialize the interview instance if not already done
-        if interview_instance_id not in app.config['INTERVIEW_INSTANCES']:
-            flash('Interview instance not found. Please restart the interview.', 'error')
-            return redirect(url_for('interview_start_page'))
-        interview_instance = app.config['INTERVIEW_INSTANCES'][interview_instance_id]
-        question = get_next_question(interview_instance_id)  # Fetch the first question
-        question = json.loads(question)
-        question_text = question["text"]
-        question_audio = question["audio"]
+
         # Fetch the first question
-        # Use these values to conduct the interview
-        print(f"Job Title: {job_title}, Experience: {experience_text}, Instance: {interview_instance},question: {question}")
-        # You can also pass the interview instance to the template if needed
-        # Render the template with the job title and experience t
+        question = get_next_question(interview_instance_id)
+        question_data = question.get_json()
+        print(question)
+    
+        try:
+            # Access the data
+            question_text = question_data['question']
+            question_audio = question_data['audio']
+        except (json.JSONDecodeError, KeyError) as e:
+            print(f"Error processing question data: {e}", file=sys.stderr)
+            flash('Invalid question data received.', 'error')
+            return redirect(url_for('interview_start_page'))
+
+        print(f"question_text{question_text},question_audio{question_audio}")
         return render_template(
             "going_to_conduct_interview.html",
-            interview_instance_id=interview_instance_id,
             question_text=question_text,
             question_audio=question_audio,
         )
@@ -233,8 +230,7 @@ def submit_answer():
         print(f"Error processing audio: {e}", file=sys.stderr)
         return jsonify({'status': 'error', 'message': 'An error occurred while processing the audio.'}), 500
 
-@app.route('/api/interview/next-question', methods=['POST'])
-@login_required
+
 def get_next_question(interview_instance_id):
     # Retrieve the interview instance from global storage
     interview_instance = app.config['INTERVIEW_INSTANCES'].get(interview_instance_id)
@@ -245,8 +241,12 @@ def get_next_question(interview_instance_id):
     try:
         # Get the next question from the generator
         question_data = run_async(interview_instance.conduct_interview())
-        print(f"Question Data: {question_data}")  # Debugging line
-        return question_data
+        print(f"Question Data: {question_data},question text{question_data["text"]}inside get generate question")  # Debugging line
+        return jsonify({
+            'status': 'success',
+            'question': question_data['text'],
+            'audio': question_data['audio']
+        })
     except StopIteration:
         # No more questions available
         return jsonify({
@@ -255,7 +255,7 @@ def get_next_question(interview_instance_id):
         })
     except Exception as e:
         print(f"Error fetching next question: {e}", file=sys.stderr)
-        return jsonify({'status': 'error', 'message': 'An error occurred while fetching the next question.'}), 500
+        return jsonify({'status': 'error', 'message': 'An error occurred while fetching the question.'}), 500
 
 
 # WebSocket event for fetching the next question
