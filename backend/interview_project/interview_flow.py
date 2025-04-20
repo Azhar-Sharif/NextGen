@@ -16,6 +16,7 @@ from .rag_engine import RAGEngine
 from openai import AsyncOpenAI
 import sys
 import json
+import shutil
 
 class Interviewer:
     def __init__(self, config_file=None, debug=False):
@@ -59,9 +60,23 @@ class Interviewer:
         self.job_description = ""
         self.rag_engine = None  # Will be initialized later
 
+        # Clear the audio directory for the new interview instance
+        self.clear_audio_directory()
+
         if self.debug:
             print("Interviewer initialized with debug mode enabled.", file=sys.stderr)
         print("Interviewer initialized.")
+
+    def clear_audio_directory(self):
+        """Clears the static/audio/ directory to reset question audio for a new interview instance."""
+        audio_dir = os.path.join(os.getcwd(), "frontend", "static", "audio")
+        if os.path.exists(audio_dir):
+            try:
+                shutil.rmtree(audio_dir)  # Remove the directory and its contents
+                os.makedirs(audio_dir)  # Recreate the directory
+                print("Audio directory cleared and reset for the new interview instance.", file=sys.stderr)
+            except Exception as e:
+                print(f"Error clearing audio directory: {e}", file=sys.stderr)
 
     def initialize_polly_client(self):
         """Initializes the Amazon Polly client."""
@@ -142,39 +157,25 @@ class Interviewer:
             return False
 
     async def conduct_interview(self):
-        """Conducts the main interview loop asynchronously, yielding one question at a time."""
-        # Ice-breaking questions
-        async for question in self.conduct_fixed_questioning("ice-breaking", num_questions=2):
-            question_text, question_audio = await self.ask_question(question)
-            yield {"text": question_text, "audio": question_audio}
+        async for question_data in self.conduct_fixed_questioning("ice-breaking", num_questions=4):
+            print("question_number", question_data["loop value"])
+            yield question_data  # Yield the question data (text and audio)
 
-        """# Adaptive technical questions
-        async for question in self.conduct_adaptive_questioning("technical", min_questions=5, max_questions=10):
-            yield question
-
-        # Behavioral questions
-        async for question in self.conduct_fixed_questioning("behavioral", num_questions=2):
-            yield question
-
-        # Problem-solving questions
-        async for question in self.conduct_fixed_questioning("problem-solving", num_questions=2):
-            yield question
-
-        # Career-goal questions
-        async for question in self.conduct_fixed_questioning("career-goal", num_questions=1):
-            yield question
-
-        # Closing statement
-        closing_statement = f"Thank you, {self.user_name}, for completing the interview. Your feedback has been saved to a PDF. Best of luck!"
-        print(f"AI: {closing_statement}")  # Print once before speaking
-        await self.speak_text_with_polly(closing_statement)
-        yield closing_statement"""
+            # Record and process the user's answer
+            audio_file_path = "temp/blob"  # Replace with the actual path
+            user_response, feedback = await self.record_and_process_answer(audio_file_path)
+            if user_response:
+                print(f"User's response: {user_response}")
+                print(f"Feedback: {feedback}")
+            else:
+                print(f"Error or no response: {feedback}")
 
     async def conduct_fixed_questioning(self, question_type, num_questions):
         """Asks a fixed number of questions of a specific type asynchronously."""
         covered_topics = []
-        
+
         for i in range(num_questions):
+            print(f"Asking question {i + 1} of {num_questions}", file=sys.stderr)  # Debugging
             history = memory.chat_memory.messages
             question = await generate_question(
                 self.job_description,
@@ -187,25 +188,23 @@ class Interviewer:
             if question == "Unable to generate a question.":
                 print(f"Unable to generate a {question_type} question.", file=sys.stderr)
                 break
-            
-            if await self.ask_question(question):
-                # Extract topics from the response to track covered material
-                latest_response = self.get_last_response()
-                if latest_response:
-                    extracted_topics = self.extract_response_topics(latest_response)
-                    covered_topics.extend(extracted_topics)
-                    print(f"Added topics for {question_type}: {extracted_topics}", file=sys.stderr)
+
+            # Ask the question and generate audio
+            question_text, question_audio = await self.ask_question(question, question_type)
+            if question_text and question_audio:
+                if i==2:
+                    break
+                yield {"text": question_text, "audio": question_audio, "loop value": i}
             else:
-                #print(f"Failed to get answer for {question_type} question {i+1}.", file=sys.stderr)
-                #return f"Failed to get answer for {question_type} question {i+1}."
+                print(f"Failed to ask {question_type} question {i + 1}.", file=sys.stderr)
                 break
-            yield question
-    async def ask_question(self, question):
-        """Asks a question and records the response asynchronously, returning the question text and audio."""
+
+    async def ask_question(self, question, question_type):
+        """Asks a question and generates the audio asynchronously, returning the question text and audio."""
         try:
             # Clean the question from any internal instructions that might be included
             cleaned_question = self.clean_question_for_speech(question)
-            
+
             if self.user_name != "User":
                 first_question_mark_index = cleaned_question.find("?")
                 if first_question_mark_index != -1:
@@ -221,7 +220,6 @@ class Interviewer:
 
             # Print only once before speaking
             print(f"AI: {personalized_question}")
-
 
             # Generate audio for the question
             loop = asyncio.get_event_loop()
@@ -239,7 +237,7 @@ class Interviewer:
                 audio_dir = os.path.join(os.getcwd(), "frontend", "static", "audio")
                 os.makedirs(audio_dir, exist_ok=True)
                 question_number = len(self.asked_questions) + 1
-                audio_filename = os.path.join(audio_dir, f"question_{question_number}.mp3")
+                audio_filename = os.path.join(audio_dir, f"question_{question_number}_{question_type}.mp3")
                 with open(audio_filename, "wb") as audio_file:
                     audio_file.write(response["AudioStream"].read())
             except Exception as e:
@@ -249,55 +247,10 @@ class Interviewer:
             # Add the question to the asked questions list
             if question not in self.asked_questions:
                 self.asked_questions.append(question)
-            """
-            print("Recording your answer...")
-            raw_audio = await record_audio_async()
-            if raw_audio is None:
-                print("No response recorded. Let's continue with the next question.")
-                return False
 
-            audio_file = await save_audio_to_wav_async(raw_audio)
-            user_response = await transcribe_audio_with_whisper_async(audio_file, self.openai_api_key)
-            if not user_response:
-                print("Could not understand your response. Let's continue with the next question.")
-                return False
-
-            # Use RAG for technical answer evaluation if available
-            question_is_technical = any(term in question.lower() for term in 
-                                       ["algorithm", "model", "data", "statistic", "machine learning", 
-                                        "code", "program", "neural", "regression", "classification"])
-            
-            if self.rag_engine and question_is_technical:
-                # Evaluate the answer using RAG
-                evaluation = await self.rag_engine.evaluate_technical_answer(
-                    question=question, 
-                    answer=user_response,
-                    job_description=self.job_description,
-                    openai_client=self.openai_client
-                )
-                
-                feedback = evaluation.get("feedback", "Thank you for your response.")
-                print(f"RAG evaluation score: {evaluation.get('score', 'N/A')}", file=sys.stderr)
-            else:
-                # Use standard response analyzer
-                feedback = await self.response_analyzer.analyze_response(
-                    user_response, question, self.openai_api_key
-                )
-
-            print(f"\nUser Response: {user_response}")
-            print(f"Feedback: {feedback}")
-
-            self.answers.append(user_response)
-            memory.chat_memory.add_ai_message(question)
-            memory.chat_memory.add_user_message(user_response)
-            add_analysis_to_history(memory, feedback)
-
-            if os.path.exists(audio_file):
-                os.remove(audio_file)  # Cleanup
-"""
             return personalized_question, f"/static/audio/{os.path.basename(audio_filename)}"
         except Exception as e:
-            print(f"Error recording response: {e}", file=sys.stderr)
+            print(f"Error asking question: {e}", file=sys.stderr)
             return None, None
 
     async def conduct_adaptive_questioning(self, question_type, min_questions=0, max_questions=10):
@@ -323,7 +276,7 @@ class Interviewer:
                 history = memory.chat_memory.messages
                 
                 # Use RAG for technical questions if available
-                if question_type == "technical" and self.rag_engine:
+                if (question_type == "technical" and self.rag_engine):
                     # Get previously asked technical questions
                     previous_technical_questions = [q for q in self.asked_questions 
                                                   if q in [msg.content for msg in history if hasattr(msg, 'type') and msg.type == "ai"]]
@@ -543,7 +496,7 @@ class Interviewer:
         """Extracts the most recent feedback from the conversation history."""
         for message in reversed(memory.chat_memory.messages):
             if hasattr(message, 'content') and message.content.startswith("Feedback:"):
-                return message.content[9:].strip()
+                return message.content[9:].trip()
         return ""
 
     def get_last_response(self):
@@ -670,3 +623,33 @@ class Interviewer:
             return False
         
         return True"""
+
+    async def record_and_process_answer(self, audio_file_path):
+        """Processes the user's recorded answer."""
+        try:
+            # Transcribe the audio using Whisper or another transcription service
+            user_response = await transcribe_audio_with_whisper_async(audio_file_path, self.openai_api_key)
+            if not user_response:
+                return None, "Could not understand your response."
+
+            # Analyze the response (optional)
+            if self.asked_questions:
+                feedback = await self.response_analyzer.analyze_response(
+                    user_response, self.asked_questions[-1], self.openai_api_key
+                )
+            else:
+                feedback = "No previous question available for analysis."
+
+            print(f"\nUser Response: {user_response}")
+            print(f"Feedback: {feedback}")
+
+            # Add the response and feedback to the memory
+            self.answers.append(user_response)
+            memory.chat_memory.add_ai_message(self.asked_questions[-1])
+            memory.chat_memory.add_user_message(user_response)
+            add_analysis_to_history(memory, feedback)
+
+            return user_response, feedback
+        except Exception as e:
+            print(f"Error processing answer: {e}", file=sys.stderr)
+            return None, "An error occurred while processing the answer."
