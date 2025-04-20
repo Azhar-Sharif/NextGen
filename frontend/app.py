@@ -9,48 +9,24 @@ import base64
 import wave
 import numpy as np
 import subprocess
+import uuid
 
 # Add the parent directory to sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from backend.interview_project.async_file import run_async
-from backend.main import main as start_interview
 from backend.interview_project.interview_flow import *
-from backend.interview_project.async_file import run_async
 from backend.interview_project.audio_processing import save_audio_to_wav_async
-
-# Initialize Flask and Flask-SocketIO
+from flask_socketio import SocketIO
 app = Flask(__name__)
+socketio = SocketIO(app, async_mode='eventlet')
 app.config['SECRET_KEY'] = 'your-secret-key'
 app.config['INTERVIEW_INSTANCES'] = {}
-socketio = SocketIO(app)
+# Store interview instances and their generators
+interview_generators = {}
 
-# Mock data for demo
-mock_interview_data = {
-    'completed_interviews': 5,
-    'average_score': '85%',
-    'upcoming_interviews': 2,
-    'improvement_tips': [
-        'Work on maintaining consistent eye contact',
-        'Practice speaking at a slower pace',
-        'Provide more specific examples in answers'
-    ]
-}
 
-mock_results = {
-    'confidence': '75%',
-    'clarity': 'Good',
-    'response_time': '45 seconds',
-    'tip': 'Try to provide more detailed examples in your responses'
-}
-
-# Mock questions for the interview
-mock_questions = [
-    "Tell me about yourself.",
-    "What are your strengths and weaknesses?",
-    "Describe a challenging situation and how you handled it.",
-    "Why do you want to work for this company?",
-    "Where do you see yourself in 5 years?"
-]
+UPLOAD_FOLDER = 'uploads/audio'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Login required decorator
 def login_required(f):
@@ -69,50 +45,6 @@ def index():
 def landing():
     return render_template('landing.html')
 
-@app.route('/live-interview', methods=['POST', 'GET'])
-@login_required
-def live_interview():
-    if request.method == 'POST':
-        # Retrieve form data
-        job_title = request.form.get('job_title')
-        experience_text = request.form.get('experience_text')
-        interview_instance_id = session.get('interview_instance_id')
-
-        # Retrieve the interview instance from global storage
-        interview_instance = app.config['INTERVIEW_INSTANCES'].get(interview_instance_id)
-
-        if not interview_instance:
-            flash('Interview instance not found. Please restart the interview.', 'error')
-            return redirect(url_for('interview_start_page'))
-
-        # Use these values to conduct the interview
-        print(f"Job Title: {job_title}, Experience: {experience_text}, Instance: {interview_instance}")
-
-        # Initialize the interview process or fetch the first question
-        try:
-            question_data = asyncio.run(interview_instance.conduct_interview().__anext__())
-            if question_data == "completed":
-                flash('The interview is complete. Thank you for participating!', 'success')
-                return redirect(url_for('show_results'))
-            first_question = question_data["text"]
-            question_audio = question_data["audio"]
-            print(f"First Question: {first_question}, Audio: {question_audio}")
-        except StopIteration:
-            flash('No questions available for the interview.', 'error')
-            return redirect(url_for('job_details'))
-        except Exception as e:
-            print(f"Error fetching the first question: {e}", file=sys.stderr)
-            first_question = "No questions available at the moment."
-            question_audio = ""
-
-        return render_template(
-            "live_interview.html",
-            first_question=first_question,
-            question_audio=question_audio,
-        )
-    else:
-        flash('Invalid request method.', 'error')
-        return redirect(url_for('interview_start_page'))
 
 @app.route('/job-details', methods=['GET', 'POST'])
 @login_required
@@ -127,6 +59,7 @@ def job_details():
             return redirect(url_for('job_details'))
         return redirect(url_for('interview_start_page'))
     return render_template('job_details.html')
+
 
 @app.route('/interview_start_page', methods=["POST", "GET"])
 @login_required
@@ -150,6 +83,7 @@ def interview_start_page():
         return redirect(url_for('job_details'))
 
     # Initialize the Interviewer instance
+    from backend.main import main as start_interview
     interview_instance, job_title, experience = run_async(
         start_interview(job_title=job_title, experience_text=experience_text)
     )
@@ -168,30 +102,48 @@ def interview_start_page():
         interview_instance_id=session['interview_instance_id'],
     )
 
-@app.route('/results')
+
+@app.route('/going_to_conduct_interview', methods=['POST', 'GET'])
 @login_required
-def show_result():
-    # Get the next question and audio from query parameters
-    next_question = request.args.get('question', None)
-    question_audio = request.args.get('audio', None)
+def going_to_conduct_interview():
+    if request.method == 'POST':
+        # Retrieve form data
+        job_title = request.form.get('job_title')
+        experience_text = request.form.get('experience_text')
+        interview_instance_id = session.get('interview_instance_id')
 
-    # If no question is provided, show mock results
-    if not next_question:
-        mock_results = {
-            'confidence': '75%',
-            'clarity': 'Good',
-            'response_time': '45 seconds',
-            'tip': 'Try to provide more detailed examples in your responses'
-        }
-        return render_template('results.html', mock_results=mock_results)
+        # Retrieve the interview instance from global storage
+        interview_instance = app.config['INTERVIEW_INSTANCES'].get(interview_instance_id)
 
-    # Render the results page with the next question
-    return render_template(
-        'results.html',
-        next_question=next_question,
-        question_audio=question_audio
-    )
-
+        if not interview_instance:
+            flash('Interview instance not found. Please restart the interview.', 'error')
+            return redirect(url_for('interview_start_page'))
+        # Conduct the interview
+        # This is where you would call the method to start the interview
+        # For example:
+        # interview_instance.conduct_interview()
+        # Here, you can use the interview_instance to fetch the first question
+        # Initialize the interview instance if not already done
+        if interview_instance_id not in app.config['INTERVIEW_INSTANCES']:
+            flash('Interview instance not found. Please restart the interview.', 'error')
+            return redirect(url_for('interview_start_page'))
+        interview_instance = app.config['INTERVIEW_INSTANCES'][interview_instance_id]
+        question = get_next_question(interview_instance_id)  # Fetch the first question
+        question = json.loads(question)
+        question_text = question["text"]
+        question_audio = question["audio"]
+        # Fetch the first question
+        # Use these values to conduct the interview
+        print(f"Job Title: {job_title}, Experience: {experience_text}, Instance: {interview_instance},question: {question}")
+        # You can also pass the interview instance to the template if needed
+        # Render the template with the job title and experience t
+        return render_template(
+            "going_to_conduct_interview.html",
+            interview_instance_id=interview_instance_id,
+            question_text=question_text,
+            question_audio=question_audio,
+        )
+        
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if 'user' in session:
@@ -232,20 +184,6 @@ def logout():
     flash('Successfully logged out!', 'success')
     return redirect(url_for('landing'))
 
-@app.route('/dashboard')
-@login_required
-def dashboard():
-    return render_template('dashboard.html', data=mock_interview_data)
-
-@app.route('/api/interview/complete', methods=['POST'])
-@login_required
-def complete_interview():
-    # Process the interview completion
-    # Add your interview processing logic here
-    return jsonify({
-        'status': 'success',
-        'redirect': url_for('results')
-    })
 
 @app.route('/contact')
 def contact():
@@ -292,9 +230,8 @@ def submit_answer():
 
 @app.route('/api/interview/next-question', methods=['POST'])
 @login_required
-def get_next_question():
+def get_next_question(interview_instance_id):
     # Retrieve the interview instance from global storage
-    interview_instance_id = session.get('interview_instance_id')
     interview_instance = app.config['INTERVIEW_INSTANCES'].get(interview_instance_id)
 
     if not interview_instance:
@@ -302,16 +239,9 @@ def get_next_question():
 
     try:
         # Get the next question from the generator
-        question_data = asyncio.run(interview_instance.conduct_interview().__anext__())
+        question_data = run_async(interview_instance.conduct_interview())
         print(f"Question Data: {question_data}")  # Debugging line
-        next_question = question_data["text"]
-        question_audio = question_data["audio"]
-
-        return jsonify({
-            'status': 'success',
-            'question': next_question,
-            'audio': question_audio
-        })
+        return question_data
     except StopIteration:
         # No more questions available
         return jsonify({
@@ -322,41 +252,38 @@ def get_next_question():
         print(f"Error fetching next question: {e}", file=sys.stderr)
         return jsonify({'status': 'error', 'message': 'An error occurred while fetching the next question.'}), 500
 
-# Store interview instances and their generators
-interview_generators = {}
 
 # WebSocket event for fetching the next question
 @socketio.on('fetch_next_question')
-def handle_fetch_next_question(data):
-    """Handles the 'fetch_next_question' event and sends the next question to the frontend."""
-    interview_instance_id = session.get('interview_instance_id')
-    interview_instance = app.config['INTERVIEW_INSTANCES'].get(interview_instance_id)
-
-    if not interview_instance:
-        emit('next_question', {'status': 'error', 'message': 'Interview instance not found.'})
-        return
-
-    # Retrieve or initialize the generator
-    if interview_instance_id not in interview_generators:
-        interview_generators[interview_instance_id] = interview_instance.conduct_interview()
-
-    generator = interview_generators[interview_instance_id]
-
+async def handle_fetch_next_question(data):
+    """
+    Handles the 'fetch_next_question' event from the frontend.
+    Dynamically generates and emits the next question in real-time.
+    """
     try:
-        # Fetch the next question from the generator
-        question_data = asyncio.run(generator.__anext__())
-        emit('next_question', {
-            'status': 'success',
-            'question': question_data["text"],
-            'audio': question_data["audio"]
-        })
-    except StopIteration:
-        # Remove the generator when the interview is complete
-        del interview_generators[interview_instance_id]
-        emit('next_question', {'status': 'completed', 'message': 'The interview is complete.'})
+        # Retrieve the interview instance from the session
+        interview_instance_id = session.get('interview_instance_id')
+        interview_instance = app.config['INTERVIEW_INSTANCES'].get(interview_instance_id)
+
+        if not interview_instance:
+            emit('next_question', {'status': 'error', 'message': 'Interview instance not found.'})
+            return
+
+        # Dynamically generate the next question
+        question_data = await interview_instance.generate_next_question()
+        if question_data:
+            # Emit the question to the frontend in real-time
+            emit('next_question', {
+                'status': 'success',
+                'question': question_data['text'],
+                'audio': question_data['audio']
+            })
+        else:
+            # Emit a completion message if no more questions are available
+            emit('next_question', {'status': 'completed', 'message': 'The interview is complete.'})
     except Exception as e:
-        print(f"Error fetching next question: {e}", file=sys.stderr)
-        emit('next_question', {'status': 'error', 'message': 'An error occurred while fetching the next question.'})
+        print(f"Error in handle_fetch_next_question: {e}", file=sys.stderr)
+        emit('next_question', {'status': 'error', 'message': str(e)})
 
 @socketio.on('ask_question')
 def handle_ask_question(data):
@@ -382,105 +309,177 @@ def handle_ask_question(data):
         })
     except Exception as e:
         print(f"Error in ask_question: {e}", file=sys.stderr)
-        emit('question_response', {'status': 'error', 'message': 'An error occurred while asking the question.'})
+        emit('question_response', {'status': 'error', 'message': str(e)})
 
 @socketio.on('submit_audio_answer')
-def handle_audio_answer(data):
-    """Handles the 'submit_audio_answer' event and processes the audio answer."""
-    interview_instance_id = session.get('interview_instance_id')
-    interview_instance = app.config['INTERVIEW_INSTANCES'].get(interview_instance_id)
+async def handle_audio_answer(data):
+    """
+    Handles the audio answer submitted by the frontend.
 
-    if not interview_instance:
-        emit('answer_feedback', {'status': 'error', 'message': 'Interview instance not found.'})
-        return
-
+    Args:
+        data (dict): Contains the audio file path and other metadata.
+    """
     try:
-        # Save the audio file
-        audio_binary = data.get('audio')
-        if not audio_binary:
-            emit('answer_feedback', {'status': 'error', 'message': 'No audio data received.'})
+        audio_file_path = data.get('audio_file_path')
+        interview_instance_id = session.get('interview_instance_id')
+        interview_instance = app.config['INTERVIEW_INSTANCES'].get(interview_instance_id)
+
+        if not interview_instance:
+            emit('audio_submission', {'status': 'error', 'message': 'Interview instance not found.'})
             return
 
-        audio_file_path = os.path.join('frontend', 'static', 'audio', 'response.wav')
-        with open(audio_file_path, 'wb') as f:
-            f.write(audio_binary)
-
-        # Process the audio file
-        result = asyncio.run(interview_instance.record_and_process_answer(audio_file_path))
-        emit('answer_feedback', result)
-    except Exception as e:
-        print(f"Error processing audio answer: {e}", file=sys.stderr)
-        emit('answer_feedback', {'status': 'error', 'message': 'An error occurred while processing the audio answer.'})
-
-@app.route('/submit_answer_v2', methods=['POST'])
-def submit_answer_v2():
-    """Handles the submission of the user's recorded answer."""
-    if 'audio' not in request.files:
-        return jsonify({'status': 'error', 'message': 'No audio file provided.'}), 400
-    if 'interview_instance_id' not in session:
-        return jsonify({'status': 'error', 'message': 'Interview instance ID not found in session.'}), 400
-    interview_instance_id = session['interview_instance_id']
-    interview_instance = app.config['INTERVIEW_INSTANCES'].get(interview_instance_id)
-    if not interview_instance:
-        return jsonify({'status': 'error', 'message': 'Interview instance not found.'}), 404
-    # Use the correct path for the temp folder
-    temp_folder = os.path.join(os.path.dirname(__file__), 'temp')
-    os.makedirs(temp_folder, exist_ok=True)
-
-    audio_file = request.files['audio']
-    temp_audio_path = os.path.join(temp_folder, audio_file.filename)
-    converted_audio_path = os.path.join(temp_folder, 'converted_audio.wav')
-
-    try:
-        # Save the uploaded audio file temporarily
-        audio_file.save(temp_audio_path)
-
-        # Check if the file is a valid WAV file
-        try:
-            with wave.open(temp_audio_path, 'rb') as audio:
-                pass  # File is valid WAV
-        except wave.Error:
-            # Convert the file to WAV format using ffmpeg
-            ffmpeg_command = [
-                'ffmpeg', '-i', temp_audio_path, '-ar', '16000', '-ac', '1', converted_audio_path
-            ]
-            subprocess.run(ffmpeg_command, check=True)
-            temp_audio_path = converted_audio_path  # Use the converted file
-
-        # Validate the audio file duration
-        with wave.open(temp_audio_path, 'rb') as audio:
-            frame_rate = audio.getframerate()
-            num_frames = audio.getnframes()
-            duration = num_frames / float(frame_rate)
-
-            if duration < 0.1:
-                os.remove(temp_audio_path)
-                return jsonify({'status': 'error', 'message': 'Audio file is too short. Minimum length is 0.1 seconds.'}), 400
-
-        # Process the audio file using the Interviewer class
-        interviewer = app.config.get('INTERVIEW_INSTANCE')
-        if not interviewer:
-            return jsonify({'status': 'error', 'message': 'Interview instance not found.'}), 500
-        print(f"Processing audio file: {temp_audio_path}")  # Debugging log
-        # Use the Interviewer class to process the audio and get feedback
-        
-        user_response, feedback = asyncio.run(interviewer.record_and_process_answer(temp_audio_path))
-
-        # Clean up the temporary files
-        os.remove(temp_audio_path)
-        if os.path.exists(converted_audio_path):
-            os.remove(converted_audio_path)
+        # Process the audio response
+        user_response, feedback = await interview_instance.record_audio_response(audio_file_path)
 
         if user_response:
-            return jsonify({'status': 'success', 'response': user_response, 'feedback': feedback})
+            emit('audio_submission', {
+                'status': 'success',
+                'user_response': user_response,
+                'feedback': feedback
+            })
         else:
-            return jsonify({'status': 'error', 'message': feedback}), 500
-    except subprocess.CalledProcessError as e:
-        print(f"FFmpeg error: {e}", file=sys.stderr)
-        return jsonify({'status': 'error', 'message': 'Failed to convert audio file to WAV format.'}), 500
+            emit('audio_submission', {
+                'status': 'error',
+                'message': feedback
+            })
     except Exception as e:
-        print(f"Error processing answer: {e}", file=sys.stderr)
-        return jsonify({'status': 'error', 'message': 'An error occurred while processing the answer.'}), 500
+        print(f"Error handling audio answer: {e}", file=sys.stderr)
+        emit('audio_submission', {'status': 'error', 'message': 'An error occurred while processing the audio.'})
 
+@socketio.on('submit_answer_v2')
+async def submit_answer_v2(data):
+    job_title = data['job_title']
+    answer = data['answer']
+    audio_file = data['audio_file']
+
+    # Ensure we have the interview instance
+    interview_instance = INTERVIEW_INSTANCES.get(job_title, None)
+    if not interview_instance:
+        emit('error', {'message': 'Interview session not found!'})
+        return
+
+    # Temporarily save and process the audio file
+    temp_audio_file = tempfile.NamedTemporaryFile(delete=False)
+    temp_audio_file_path = temp_audio_file.name
+    try:
+        # Saving the audio file
+        with open(temp_audio_file_path, 'wb') as f:
+            f.write(audio_file)
+
+        # Convert the audio to WAV format (if it's not already)
+        wav_file_path = temp_audio_file_path.replace(".mp3", ".wav")  # Ensure proper extension handling
+        subprocess.run(['ffmpeg', '-i', temp_audio_file_path, wav_file_path], check=True)
+
+        # You can process the WAV file (e.g., transcribe, analyze)
+        logging.debug(f"Audio processed: {wav_file_path}")
+
+        # Handle the submission of the answer
+        feedback = interview_instance.submit_answer(answer)
+
+        # Now, after processing, emit the feedback and move to the next question
+        emit('answer_feedback', {'feedback': feedback})
+
+        # After the answer is processed, wait for the next question
+        next_question = interview_instance.get_next_question()
+        emit('new_question', {'question': next_question})
+
+    except Exception as e:
+        logging.error(f"Error processing answer or audio: {e}")
+        emit('error', {'message': 'Failed to process your answer or audio file.'})
+
+    finally:
+        # Clean up the temporary files
+        if os.path.exists(temp_audio_file_path):
+            os.remove(temp_audio_file_path)
+        if os.path.exists(wav_file_path):
+            os.remove(wav_file_path)
+
+@app.route('/upload_audio', methods=['POST'])
+def upload_audio():
+    if 'audio' not in request.files:
+        return jsonify({'status': 'error', 'message': 'No audio file provided.'}), 400
+
+    audio_file = request.files['audio']
+    if audio_file.filename == '':
+        return jsonify({'status': 'error', 'message': 'No selected file.'}), 400
+
+    # Save the audio file with a unique name
+    file_extension = audio_file.filename.split('.')[-1]
+    unique_filename = f"{uuid.uuid4()}.{file_extension}"
+    file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
+    audio_file.save(file_path)
+
+    return jsonify({'status': 'success', 'file_path': file_path})
+# Initialize the interview process or fetch the first question
+@app.route('/live_interview', methods=['POST', 'GET'])
+@login_required
+def live_interview():
+    if 'user' not in session:
+        flash('Please login to access interviews', 'warning')
+        return redirect(url_for('login'))
+    if request.method == 'POST':
+        # Retrieve the interview instance from global storage
+        interview_instance_id = session.get('interview_instance_id')
+        interview_instance = app.config['INTERVIEW_INSTANCES'].get(interview_instance_id)
+        if not interview_instance:
+            flash('Interview instance not found. Please restart the interview.', 'error')
+            return redirect(url_for('interview_start_page'))
+        # Use the interview instance to fetch the first question
+        # Initialize the interview instance if not already done
+        if interview_instance_id not in app.config['INTERVIEW_INSTANCES']:
+            flash('Interview instance not found. Please restart the interview.', 'error')
+            return redirect(url_for('interview_start_page'))
+        # Fetch the first question
+        try:
+            question_data =  asyncio.run(interview_instance.conduct_interview())
+            if question_data == "completed":
+                flash('The interview is complete. Thank you for participating!', 'success')
+                return redirect(url_for('show_result'))
+            first_question = question_data["text"]
+            question_audio = question_data["audio"]
+            print(f"First Question: {first_question}, Audio: {question_audio}")
+        except StopIteration:
+            flash('No questions available for the interview.', 'error')
+            return redirect(url_for('job_details'))
+        except Exception as e:
+            print(f"Error fetching the first question: {e}", file=sys.stderr)
+            first_question = "No questions available at the moment."
+            question_audio = ""
+
+        return render_template(
+            "live_interview.html",
+            first_question=first_question,
+            question_audio=question_audio,
+        )
+    else:
+        flash('Invalid request method.', 'error')
+        return redirect(url_for('interview_start_page'))
+@app.route('/show_result', methods=['POST', 'GET'])
+@login_required
+def show_result():
+    if 'user' not in session:
+        flash('Please login to access interviews', 'warning')
+        return redirect(url_for('login'))
+    interview_instance_id = session.get('interview_instance_id')
+    interview_instance = app.config['INTERVIEW_INSTANCES'].get(interview_instance_id)
+    if not interview_instance:
+        flash('Interview instance not found. Please restart the interview.', 'error')
+        return redirect(url_for('interview_start_page'))
+    # Use the interview instance to fetch the results
+    try:
+        result_data = asyncio.run(interview_instance.get_results())
+        print(f"Result Data: {result_data}")  # Debugging line
+    except Exception as e:
+        print(f"Error fetching results: {e}", file=sys.stderr)
+        result_data = "No results available at the moment."
+
+    return render_template(
+        "show_result.html",
+        result_data=result_data,
+    )
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    return render_template('dashboard.html')
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)

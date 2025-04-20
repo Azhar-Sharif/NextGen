@@ -27,22 +27,6 @@ async def main(job_title, experience_text, config_file=None, debug=False):
     interview_instance,job_title,experience_text = await interviewer.run_interview(job_title, experience_text)
     print(f"Job Title: {job_title} Experience Text: {experience_text} interview_instanc:{interview_instance}")
     return (interview_instance,job_title, experience_text)
-    """if 1:
-            print("Interview completed successfully.")
-            return 0
-        else:
-            print("Interview completed with errors.", file=sys.stderr)
-            return 1
-    except KeyboardInterrupt:
-        print("\nInterview terminated by user.")
-        return 130
-    except Exception as e:
-        print(f"Error running interview: {e}", file=sys.stderr)
-        if debug:
-            import traceback
-            traceback.print_exc()
-        return 1"""
-
 if __name__ == "__main__":
     """# Set up command line arguments
     parser = argparse.ArgumentParser(description="Run an AI-powered Interview")

@@ -12,10 +12,11 @@
     </div>
 
     <!-- Start Interview Button -->
-    <form method="POST" action="{{ url_for('live_interview') }}">
+    <form method="POST" action="{{ url_for('going_to_conduct_interview') }}">
         <input type="hidden" name="job_title" value="{{ job_title }}">
         <input type="hidden" name="experience_text" value="{{ experience_text }}">
-        <button type="submit" class="btn btn-primary">Start Interview</button>
+        <input type="hidden" name="interview_instance_id" value="{{ interview_instance_id }}">
+        <button type="submit" class="btn btn-primary">conduct session</button>
     </form>
 
 </div>

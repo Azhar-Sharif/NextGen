@@ -88,7 +88,7 @@ async def save_audio_to_wav_async(audio_data: np.ndarray, fs: int = 16000) -> Op
     """
     if audio_data is None:
         print("Error: No audio data to save", file=sys.stderr)
-        return None
+        return "no audio recorded"
         
     try:
         async with aiofiles.tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmpfile:
@@ -128,7 +128,7 @@ async def transcribe_audio_with_whisper_async(audio_file: str, api_key: str) -> 
     """
     if not audio_file or not api_key:
         print("Error: Missing audio file or API key", file=sys.stderr)
-        return None
+        return "missing audio file"
         
     client = AsyncOpenAI(api_key=api_key)
     try:
@@ -136,7 +136,7 @@ async def transcribe_audio_with_whisper_async(audio_file: str, api_key: str) -> 
         file_path = Path(audio_file)
         if not file_path.exists():
             print(f"Error: Audio file not found at {audio_file}", file=sys.stderr)
-            return None
+            return "missing audio file"
             
         # Send to OpenAI for transcription
         response = await client.audio.transcriptions.create(
@@ -149,4 +149,4 @@ async def transcribe_audio_with_whisper_async(audio_file: str, api_key: str) -> 
         return response.text
     except Exception as e:
         print(f"Error transcribing audio with Whisper: {e}", file=sys.stderr)
-        return None
+        return "missing audio file"
