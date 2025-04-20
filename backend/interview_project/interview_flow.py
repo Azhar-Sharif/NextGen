@@ -93,8 +93,10 @@ class Interviewer:
         return ChatOpenAI(temperature=0.7, openai_api_key=api_key, model=model_name)
 
     async def speak_text_with_polly(self, text):
-        """Converts text to speech using Amazon Polly and returns the audio file path."""
-        temp_audio_path = None
+        """Converts text to speech using Amazon Polly and saves the audio file in the 'questions' directory."""
+        questions_dir = os.path.join("frontend", "static", "questions")
+        os.makedirs(questions_dir, exist_ok=True)  # Ensure the directory exists
+
         try:
             # Synthesize speech with Polly (run in executor)
             response = await asyncio.get_event_loop().run_in_executor(
@@ -106,24 +108,22 @@ class Interviewer:
                 )
             )
             print(f"Polly response: {response}", file=sys.stderr)
-            # Write audio to a temporary file
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_audio_file:
-                temp_audio_path = temp_audio_file.name
-                temp_audio_file.write(response["AudioStream"].read())
-                print(f"Audio saved to {temp_audio_path}", file=sys.stderr)
 
-            return temp_audio_path  # Return the path to the generated audio file
+            # Generate a unique filename for the audio file
+            sanitized_text = "".join(c if c.isalnum() else "_" for c in text[:50])  # Sanitize and truncate text
+            audio_filename = f"{sanitized_text}.mp3"
+            audio_path = os.path.join(questions_dir, audio_filename)
+
+            # Write audio to the file
+            with open(audio_path, "wb") as audio_file:
+                audio_file.write(response["AudioStream"].read())
+                print(f"Audio saved to {audio_path}", file=sys.stderr)
+
+            # Return the relative path for the frontend
+            return f"/static/questions/{audio_filename}"
         except Exception as e:
             print(f"Error with Polly speech synthesis: {e}", file=sys.stderr)
             return None  # Return None if Polly fails
-        finally:
-            # Cleanup temp file if necessary
-            print("inside finally and audio path is",temp_audio_path)
-            if temp_audio_path and not os.path.exists(temp_audio_path):
-                try:
-                    os.remove(temp_audio_path)
-                except Exception as e:
-                    print(f"Error cleaning up temp file: {e}", file=sys.stderr)
 
     async def get_job_description(self,job_title):
         
@@ -762,4 +762,3 @@ class Interviewer:
                 "audio": None,
                 "error": "An error occurred while generating the next question"
             })
-    

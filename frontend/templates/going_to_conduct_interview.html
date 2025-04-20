@@ -3,13 +3,75 @@
 {% block content %}
 <div class="interview-container">
     <h2>Going to Conduct Interview</h2>
-    <div>
-        class="job-details mb-4">
-        <h4>question-text: <span class="text-primary">{{ question_text }}</span></h4>
+
+    <!-- Display the question text -->
+    <div class="job-details mb-4">
+        <h4>Question Text:</h4>
+        <p id="question-text" class="text-primary"></p>
     </div>
-    <div>
-        class="job-details mb-4">
-        <h4>question-audio: <span class="text-primary">{{ question_audio }}</span></h4>
+
+    <!-- Audio player -->
+    <div class="job-details mb-4">
+        <h4>Question Audio:</h4>
+        <audio id="question-audio" controls>
+            <source src="{{ question_audio }}" type="audio/mp3">
+            Your browser does not support the audio element.
+        </audio>
     </div>
-    
+
+    <!-- Controls -->
+    <div class="controls">
+        <button id="nextButton" class="btn btn-primary" disabled>Next</button>
+        <button id="recordButton" class="btn btn-secondary">Start Recording</button>
+        <button id="submitButton" class="btn btn-success" disabled>Submit Answer</button>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const questionText = "{{ question_text }}"; // Text passed from the backend
+    const questionTextElement = document.getElementById('question-text');
+    const audioElement = document.getElementById('question-audio');
+
+    // Split the question text into words
+    const words = questionText.split(" ");
+    questionTextElement.innerHTML = words.map(word => `<span>${word}</span>`).join(" ");
+
+    const wordElements = questionTextElement.querySelectorAll("span");
+
+    // Synchronize text with audio
+    audioElement.addEventListener("play", () => {
+        const updateWordHighlight = () => {
+            const currentTime = audioElement.currentTime; // Current playback time
+            const audioDuration = audioElement.duration; // Total duration of the audio
+            const wordDuration = audioDuration / words.length; // Approximate duration per word
+
+            // Calculate the current word index based on playback time
+            const currentWordIndex = Math.floor(currentTime / wordDuration);
+
+            // Reset all word highlights
+            wordElements.forEach((word, index) => {
+                word.style.backgroundColor = index === currentWordIndex ? "yellow" : "transparent";
+            });
+        };
+
+        // Update word highlights as the audio plays
+        const interval = setInterval(updateWordHighlight, 100); // Update every 100ms
+
+        // Stop updating when the audio ends
+        audioElement.addEventListener("ended", () => {
+            clearInterval(interval);
+            wordElements.forEach(word => (word.style.backgroundColor = "transparent"));
+        });
+
+        // Stop updating when the audio is paused
+        audioElement.addEventListener("pause", () => {
+            clearInterval(interval);
+        });
+    });
+});
+</script>
 {% endblock %}

@@ -18,6 +18,8 @@ from backend.interview_project.async_file import run_async
 from backend.interview_project.interview_flow import *
 from backend.interview_project.audio_processing import save_audio_to_wav_async
 from flask_socketio import SocketIO
+from flask import Flask
+
 app = Flask(__name__)
 socketio = SocketIO(app, async_mode='eventlet')
 app.config['SECRET_KEY'] = 'your-secret-key'
@@ -487,4 +489,4 @@ def show_result():
 def dashboard():
     return render_template('dashboard.html')
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True, use_reloader=False)
