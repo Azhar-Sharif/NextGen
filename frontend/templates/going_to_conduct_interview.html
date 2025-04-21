@@ -19,9 +19,15 @@
         </audio>
     </div>
 
+    <!-- Feedback Section -->
+    <div class="feedback-section" style="display: none;">
+        <h3>Feedback</h3>
+        <p id="userResponseText"></p>
+        <p id="feedbackText"></p>
+    </div>
+
     <!-- Controls -->
     <div class="controls">
-        <button id="nextButton" class="btn btn-primary" disabled>Next</button>
         <button id="recordButton" class="btn btn-secondary">Start Recording</button>
         <button id="submitButton" class="btn btn-success" disabled>Submit Answer</button>
     </div>
@@ -71,6 +77,170 @@ document.addEventListener('DOMContentLoaded', function () {
         audioElement.addEventListener("pause", () => {
             clearInterval(interval);
         });
+    });
+
+    const recordButton = document.getElementById('recordButton');
+    const submitButton = document.getElementById('submitButton');
+    let mediaRecorder;
+    let audioChunks = [];
+
+    recordButton.addEventListener('click', async () => {
+        if (recordButton.textContent === 'Start Recording') {
+            try {
+                console.log("Requesting microphone access...");
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                console.log("Microphone access granted.");
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = (e) => {
+                    audioChunks.push(e.data);
+                };
+
+                mediaRecorder.onstop = () => {
+                    console.log("Recording stopped.");
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    console.log("Audio Blob URL:", audioUrl);
+
+                    // Save the audioBlob for submission
+                    window.audioBlob = audioBlob;
+                    
+                    // Enable the submit button
+                    submitButton.disabled = false;
+
+                };
+
+                mediaRecorder.start();
+                console.log("Recording started.");
+
+                // Update button text to "Stop Recording"
+                recordButton.textContent = 'Stop Recording';
+            } catch (err) {
+                console.error("Error accessing microphone:", err);
+                alert("Microphone access is required to record audio.");
+            }
+        } else if (recordButton.textContent === 'Stop Recording') {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+                alert(console.log("Stopping recording...");
+            } else {
+                console.error("MediaRecorder is not in a recording state.");
+            }
+
+            // Update button text back to "Start Recording"
+            recordButton.textContent = 'Start Recording';
+        }
+    });
+
+    submitButton.addEventListener('click', () => {
+        if (!window.audioBlob) {
+            alert("No audio recorded. Please record your answer first.");
+            return;
+        }
+
+        // Save the audio file to the server
+        const formData = new FormData();
+        const audioFile = new File([window.audioBlob], 'response.wav', { type: 'audio/wav' });
+        formData.append('audio_file', audioFile);
+
+        // Use fetch to upload the audio file to the server
+        fetch('/upload_audio', {
+            method: 'POST',
+            body: formData,
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    console.log("Audio file uploaded successfully:", data.file_path);
+
+                    // Emit the WebSocket event with the actual file path
+                    socket.emit('submit_audio_answer', {
+                        audio_file_path: data.file_path // Pass the uploaded file path
+                    });
+
+                    console.log("Audio file path sent to backend:", data.file_path);
+                } else {
+                    console.error("Error uploading audio:", data.message);
+                    alert(`Error: ${data.message}`);
+                }
+            })
+            .catch(err => {
+                console.error("Error uploading audio:", err);
+                alert("An error occurred while uploading the audio.");
+            });
+
+        // Disable the submit button while processing
+        submitButton.disabled = true;
+        recordButton.disabled = true;
+    });
+
+    const socket = io(); // Initialize WebSocket connection
+    const nextButton = document.getElementById('nextButton');
+    const feedbackSection = document.querySelector('.feedback-section');
+    const feedbackText = document.getElementById('feedbackText');
+    const userResponseText = document.getElementById('userResponseText');
+
+    // Listen for the 'audio_submission' event
+    socket.on('audio_submission', (data) => {
+        if (data.status === 'success') {
+            alert(`Feedback: ${data.feedback}`);
+        } else {
+            alert(`Error: ${data.message}`);
+        }
+
+        // Re-enable the buttons
+        submitButton.disabled = false;
+        recordButton.disabled = false;
+    });
+
+    // Listen for the 'question_response' event
+    socket.on('question_response', (data) => {
+        if (data.status === 'success') {
+            // Update the question text and audio
+            const questionTextElement = document.getElementById('question-text');
+            const audioElement = document.getElementById('question-audio');
+            const words = data.question.split(" ");
+            questionTextElement.innerHTML = words.map(word => `<span>${word}</span>`).join(" ");
+            const wordElements = questionTextElement.querySelectorAll("span");
+
+            audioElement.src = data.audio;
+            audioElement.load();
+
+            // Synchronize text with audio
+            audioElement.addEventListener("play", () => {
+                const updateWordHighlight = () => {
+                    const currentTime = audioElement.currentTime;
+                    const audioDuration = audioElement.duration;
+                    const wordDuration = audioDuration / words.length;
+                    const currentWordIndex = Math.floor(currentTime / wordDuration);
+
+                    wordElements.forEach((word, index) => {
+                        word.style.backgroundColor = index === currentWordIndex ? "yellow" : "transparent";
+                    });
+                };
+
+                const interval = setInterval(updateWordHighlight, 100);
+
+                audioElement.addEventListener("ended", () => {
+                    clearInterval(interval);
+                    wordElements.forEach(word => (word.style.backgroundColor = "transparent"));
+                });
+
+                audioElement.addEventListener("pause", () => {
+                    clearInterval(interval);
+                });
+            });
+        } else {
+            alert(`Error fetching question: ${data.message}`);
+        }
+    });
+
+    // Handle the "Next" button click to fetch the next question
+    nextButton.addEventListener('click', () => {
+        socket.emit('fetch_next_question', {});
+        feedbackSection.style.display = 'none'; // Hide feedback section
+        nextButton.disabled = true; // Disable the "Next" button until the next question is fetched
     });
 });
 </script>

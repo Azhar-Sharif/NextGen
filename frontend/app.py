@@ -210,28 +210,6 @@ def demo_interview():
     }
     return render_template('demo.html', data=mock_demo_data)
 
-@app.route('/api/interview/submit', methods=['POST'])
-@login_required
-def submit_answer():
-    try:
-        if 'audio' not in request.files:
-            return jsonify({'status': 'error', 'message': 'No audio file provided.'}), 400
-
-        audio_file = request.files['audio']
-        print(f"Received audio file: {audio_file.filename}")  # Debugging log
-
-        # Process the audio file (add your logic here)
-        # Example: Save the file temporarily
-        temp_audio_path = os.path.join('temp', audio_file.filename)
-        os.makedirs('temp', exist_ok=True)
-        audio_file.save(temp_audio_path)
-
-        # Simulate processing and return success
-        return jsonify({'status': 'success', 'message': 'Audio processed successfully.'})
-    except Exception as e:
-        print(f"Error processing audio: {e}", file=sys.stderr)
-        return jsonify({'status': 'error', 'message': 'An error occurred while processing the audio.'}), 500
-
 
 def get_next_question(interview_instance_id):
     # Retrieve the interview instance from global storage
@@ -335,8 +313,13 @@ async def handle_audio_answer(data):
             emit('audio_submission', {'status': 'error', 'message': 'Interview instance not found.'})
             return
 
+        # Check if the audio file exists
+        if not audio_file_path or not os.path.exists(audio_file_path):
+            emit('audio_submission', {'status': 'error', 'message': 'Audio file not found.'})
+            return
+
         # Process the audio response
-        user_response, feedback = await interview_instance.record_audio_response(audio_file_path)
+        user_response, feedback = await interview_instance.process_and_record_answer(audio_file_path)
 
         if user_response:
             emit('audio_submission', {
@@ -353,70 +336,19 @@ async def handle_audio_answer(data):
         print(f"Error handling audio answer: {e}", file=sys.stderr)
         emit('audio_submission', {'status': 'error', 'message': 'An error occurred while processing the audio.'})
 
-@socketio.on('submit_answer_v2')
-async def submit_answer_v2(data):
-    job_title = data['job_title']
-    answer = data['answer']
-    audio_file = data['audio_file']
-
-    # Ensure we have the interview instance
-    interview_instance = INTERVIEW_INSTANCES.get(job_title, None)
-    if not interview_instance:
-        emit('error', {'message': 'Interview session not found!'})
-        return
-
-    # Temporarily save and process the audio file
-    temp_audio_file = tempfile.NamedTemporaryFile(delete=False)
-    temp_audio_file_path = temp_audio_file.name
-    try:
-        # Saving the audio file
-        with open(temp_audio_file_path, 'wb') as f:
-            f.write(audio_file)
-
-        # Convert the audio to WAV format (if it's not already)
-        wav_file_path = temp_audio_file_path.replace(".mp3", ".wav")  # Ensure proper extension handling
-        subprocess.run(['ffmpeg', '-i', temp_audio_file_path, wav_file_path], check=True)
-
-        # You can process the WAV file (e.g., transcribe, analyze)
-        logging.debug(f"Audio processed: {wav_file_path}")
-
-        # Handle the submission of the answer
-        feedback = interview_instance.submit_answer(answer)
-
-        # Now, after processing, emit the feedback and move to the next question
-        emit('answer_feedback', {'feedback': feedback})
-
-        # After the answer is processed, wait for the next question
-        next_question = interview_instance.get_next_question()
-        emit('new_question', {'question': next_question})
-
-    except Exception as e:
-        logging.error(f"Error processing answer or audio: {e}")
-        emit('error', {'message': 'Failed to process your answer or audio file.'})
-
-    finally:
-        # Clean up the temporary files
-        if os.path.exists(temp_audio_file_path):
-            os.remove(temp_audio_file_path)
-        if os.path.exists(wav_file_path):
-            os.remove(wav_file_path)
-
 @app.route('/upload_audio', methods=['POST'])
 def upload_audio():
-    if 'audio' not in request.files:
-        return jsonify({'status': 'error', 'message': 'No audio file provided.'}), 400
+    if 'audio_file' not in request.files:
+        return jsonify({'status': 'error', 'message': 'No audio file uploaded.'}), 400
 
-    audio_file = request.files['audio']
+    audio_file = request.files['audio_file']
     if audio_file.filename == '':
         return jsonify({'status': 'error', 'message': 'No selected file.'}), 400
 
-    # Save the audio file with a unique name
-    file_extension = audio_file.filename.split('.')[-1]
-    unique_filename = f"{uuid.uuid4()}.{file_extension}"
-    file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
+    file_path = os.path.join(UPLOAD_FOLDER, audio_file.filename)
     audio_file.save(file_path)
+    return jsonify({'status': 'success', 'file_path': file_path}), 200
 
-    return jsonify({'status': 'success', 'file_path': file_path})
 # Initialize the interview process or fetch the first question
 @app.route('/live_interview', methods=['POST', 'GET'])
 @login_required

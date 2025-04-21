@@ -632,37 +632,8 @@ class Interviewer:
         
         return True"""
 
-    async def record_and_process_answer(self, audio_file_path):
-        """Processes the user's recorded answer."""
-        try:
-            # Transcribe the audio using Whisper or another transcription service
-            user_response = await transcribe_audio_with_whisper_async(audio_file_path, self.openai_api_key)
-            if not user_response:
-                return None, "Could not understand your response."
 
-            # Analyze the response (optional)
-            if self.asked_questions:
-                feedback = await self.response_analyzer.analyze_response(
-                    user_response, self.asked_questions[-1], self.openai_api_key
-                )
-            else:
-                feedback = "No previous question available for analysis."
-
-            print(f"\nUser Response: {user_response}")
-            print(f"Feedback: {feedback}")
-
-            # Add the response and feedback to the memory
-            self.answers.append(user_response)
-            memory.chat_memory.add_ai_message(self.asked_questions[-1])
-            memory.chat_memory.add_user_message(user_response)
-            add_analysis_to_history(memory, feedback)
-
-            return user_response, feedback
-        except Exception as e:
-            print(f"Error processing answer: {e}", file=sys.stderr)
-            return None, "An error occurred while processing the answer."
-
-    async def record_audio_response(self, audio_file_path):
+    async def process_and_record_answer(self, audio_file_path):
         """
         Processes the user's audio response passed from the frontend.
 
@@ -675,13 +646,13 @@ class Interviewer:
         try:
             if not audio_file_path or not os.path.exists(audio_file_path):
                 print("No audio file provided or file does not exist. Let's continue with the next question.")
-                return None, "No audio file provided."
+                return False
 
             # Transcribe the audio using Whisper or another transcription service
             user_response = await transcribe_audio_with_whisper_async(audio_file_path, self.openai_api_key)
             if not user_response:
                 print("Could not understand your response. Let's continue with the next question.")
-                return None, "Could not understand your response."
+                return False
 
             # Determine if the question is technical based on keywords
             question_is_technical = any(term in self.asked_questions[-1].lower() for term in 
@@ -706,6 +677,11 @@ class Interviewer:
 
             print(f"\nUser Response: {user_response}")
             print(f"Feedback: {feedback}")
+            # Add the response and feedback to memory
+            self.answers.append(user_response)
+            memory.chat_memory.add_ai_message(self.asked_questions[-1])
+            memory.chat_memory.add_user_message(user_response)
+            add_analysis_to_history(memory, feedback)
 
             # Emit response + feedback to the frontend
             await socketio.emit("feedback", {
@@ -713,21 +689,11 @@ class Interviewer:
                 "feedback": feedback
             })
 
-            # Add the response and feedback to memory
-            self.answers.append(user_response)
-            memory.chat_memory.add_ai_message(self.asked_questions[-1])
-            memory.chat_memory.add_user_message(user_response)
-            add_analysis_to_history(memory, feedback)
-
-            # Cleanup the audio file
-            if os.path.exists(audio_file_path):
-                os.remove(audio_file_path)
-
-            return user_response, feedback
+            
+            
         except Exception as e:
             print(f"Error processing audio response: {e}", file=sys.stderr)
-            return None, "An error occurred while processing the audio response."
-
+            return False
     async def generate_next_question(self):
         """Dynamically generates the next question using the LLM."""
         try:
